@@ -289,67 +289,87 @@ void assignPositionsInorder(HuffmanNode* root, int& currentX, int depth, VizNode
 
 // draw function (SFML 2.x style)
 void drawTreeSFML(sf::RenderWindow& window, VizNode viz[], int vizCount, float nodeRadius, sf::Font& font) {
-    // draw edges first
+    // Draw edges first with VISIBLE COLORS
     for (int i = 0; i < vizCount; i++) {
         HuffmanNode* node = viz[i].n;
         if (!node) continue;
+
         if (node->left) {
             // find left child viz
-            for (int j = 0; j < vizCount; j++) if (viz[j].n == node->left) {
-                sf::Vertex line[] = {
-                    sf::Vertex(sf::Vector2f(viz[i].screenX, viz[i].screenY)),
-                    sf::Vertex(sf::Vector2f(viz[j].screenX, viz[j].screenY))
-                };
-                window.draw(line, 2, sf::Lines);
-                break;
+            for (int j = 0; j < vizCount; j++) {
+                if (viz[j].n == node->left) {
+                    sf::Vertex line[] = {
+                        sf::Vertex(sf::Vector2f(viz[i].screenX, viz[i].screenY), sf::Color::Black),
+                        sf::Vertex(sf::Vector2f(viz[j].screenX, viz[j].screenY), sf::Color::Black)
+                    };
+                    window.draw(line, 2, sf::Lines);
+                    break;
+                }
             }
         }
+
         if (node->right) {
-            for (int j = 0; j < vizCount; j++) if (viz[j].n == node->right) {
-                sf::Vertex line[] = {
-                    sf::Vertex(sf::Vector2f(viz[i].screenX, viz[i].screenY)),
-                    sf::Vertex(sf::Vector2f(viz[j].screenX, viz[j].screenY))
-                };
-                window.draw(line, 2, sf::Lines);
-                break;
+            for (int j = 0; j < vizCount; j++) {
+                if (viz[j].n == node->right) {
+                    sf::Vertex line[] = {
+                        sf::Vertex(sf::Vector2f(viz[i].screenX, viz[i].screenY), sf::Color::Black),
+                        sf::Vertex(sf::Vector2f(viz[j].screenX, viz[j].screenY), sf::Color::Black)
+                    };
+                    window.draw(line, 2, sf::Lines);
+                    break;
+                }
             }
         }
     }
 
-    // draw nodes & labels
+    // Draw nodes & labels
     for (int i = 0; i < vizCount; i++) {
         if (!viz[i].n) continue;
+
+        // Different colors for leaf vs internal nodes
+        sf::Color nodeColor = viz[i].n->isLeaf() ? sf::Color(144, 238, 144) : sf::Color(173, 216, 230);
+
         sf::CircleShape circle(nodeRadius);
         circle.setOrigin(nodeRadius, nodeRadius);
         circle.setPosition(viz[i].screenX, viz[i].screenY);
         circle.setOutlineColor(sf::Color::Black);
         circle.setOutlineThickness(2.f);
-        circle.setFillColor(sf::Color(220, 220, 255));
+        circle.setFillColor(nodeColor);
         window.draw(circle);
 
-        // label: printable char or freq
+        // Label: printable char or freq
         string label;
         if (viz[i].n->isLeaf()) {
             unsigned char c = viz[i].n->data;
             if (c == '\n') label = "\\n";
             else if (c == '\t') label = "\\t";
+            else if (c == ' ') label = "SPC";
             else if (isprint(c)) label = string(1, (char)c);
             else {
                 char buf[16];
                 sprintf_s(buf, sizeof(buf), "0x%02X", c);
                 label = buf;
             }
-            label += "\n";
-            label += to_string((uint32_t)viz[i].n->freq);
         }
         else {
             label = to_string((uint32_t)viz[i].n->freq);
         }
 
-        sf::Text txt(label, font, 12);
+        // Draw label inside circle for better visibility
+        sf::Text txt(label, font, 11);
         txt.setFillColor(sf::Color::Black);
-        txt.setPosition(viz[i].screenX - nodeRadius, viz[i].screenY - nodeRadius - 18);
+        sf::FloatRect bounds = txt.getLocalBounds();
+        txt.setOrigin(bounds.width / 2.f, bounds.height / 2.f);
+        txt.setPosition(viz[i].screenX, viz[i].screenY - 3.f);
         window.draw(txt);
+
+        // Draw frequency below the node
+        sf::Text freqTxt(to_string((uint32_t)viz[i].n->freq), font, 9);
+        freqTxt.setFillColor(sf::Color(40, 40, 40));
+        sf::FloatRect freqBounds = freqTxt.getLocalBounds();
+        freqTxt.setOrigin(freqBounds.width / 2.f, 0);
+        freqTxt.setPosition(viz[i].screenX, viz[i].screenY + nodeRadius + 2.f);
+        window.draw(freqTxt);
     }
 }
 
@@ -502,14 +522,39 @@ int main() {
                             vizCount = 0;
                             int curX = 0;
                             assignPositionsInorder(root, curX, 0, viz, vizCount);
-                            float spacingX = 60.f;
-                            float spacingY = 90.f;
-                            float offsetX = 400.f;
-                            float offsetY = 40.f;
+
+                            // Calculate tree dimensions
+                            int maxDepth = 0;
+                            int maxX = 0;
+                            for (int i = 0; i < vizCount; i++) {
+                                if (viz[i].depth > maxDepth) maxDepth = viz[i].depth;
+                                if (viz[i].x > maxX) maxX = viz[i].x;
+                            }
+
+                            // Adjust spacing based on tree size
+                            float availableWidth = 750.f;  // tree background width
+                            float availableHeight = 620.f; // tree background height
+                            float spacingX = (maxX > 0) ? min(60.f, availableWidth / (maxX + 1)) : 60.f;
+                            float spacingY = (maxDepth > 0) ? min(90.f, availableHeight / (maxDepth + 1)) : 90.f;
+                            float offsetX = 20.f + (availableWidth - maxX * spacingX) / 2.f;
+                            float offsetY = 30.f;
+
                             for (int i = 0; i < vizCount; i++) {
                                 viz[i].screenX = offsetX + viz[i].x * spacingX;
                                 viz[i].screenY = offsetY + viz[i].depth * spacingY;
                             }
+
+                            // Reduce node radius for larger trees
+                            if (vizCount > 30) {
+                                nodeRadius = 18.f;
+                            }
+                            else if (vizCount > 15) {
+                                nodeRadius = 20.f;
+                            }
+                            else {
+                                nodeRadius = 22.f;
+                            }
+
 
                             processed = true;
                             // keep root pointer to free when program closes or next run
