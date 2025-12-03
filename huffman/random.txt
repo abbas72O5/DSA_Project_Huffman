@@ -1,0 +1,1 @@
+Data Structures is a course offered in the 3rd semester in Seecs Nust, It's main topics include linked lists , trees, graphs , time complexity and much more.
