@@ -60,8 +60,7 @@ public:
         rear = 0;
         h = -1;
     }
-    ~BinaryHeap() { delete[] arr; }
-
+  
     void updateHeight() {
         if (rear == 0) h = -1;
         else h = (int)floor(log2((double)rear));
@@ -629,26 +628,38 @@ int main() {
             window.draw(stats);
 
             sf::Text o(("Original size (bytes): " + to_string((unsigned long long)origBytes)), font, 14);
-            o.setPosition(790, 60); window.draw(o);
+            o.setPosition(790, 60);
+            o.setFillColor(sf::Color::Black); 
+            window.draw(o);
 
             sf::Text c(("Compressed file: " + compressedPath), font, 12);
-            c.setPosition(790, 95); window.draw(c);
+            c.setPosition(790, 95);
+            c.setFillColor(sf::Color::Black); 
+            window.draw(c);
 
             sf::Text cb(("Compressed size (bytes): " + to_string((unsigned long long)compBytes)), font, 14);
-            cb.setPosition(790, 130); window.draw(cb);
+            cb.setPosition(790, 130);
+            cb.setFillColor(sf::Color::Black); 
+            window.draw(cb);
 
             char buf[128];
             sprintf_s(buf, sizeof(buf), "Compression ratio (comp/orig): %.4f", ratio);
             sf::Text r(buf, font, 14);
-            r.setPosition(790, 165); window.draw(r);
+            r.setPosition(790, 165);
+            r.setFillColor(sf::Color::Black); 
+            window.draw(r);
 
             double perc = (origBytes > 0) ? (100.0 * (1.0 - ratio)) : 0.0;
             sprintf_s(buf, sizeof(buf), "Space saved: %.2f %%", perc);
             sf::Text ssave(buf, font, 14);
-            ssave.setPosition(790, 200); window.draw(ssave);
+            ssave.setPosition(790, 200);
+            ssave.setFillColor(sf::Color::Black); 
+            window.draw(ssave);
 
             sf::Text note(("Tree nodes: " + to_string(vizCount)), font, 12);
-            note.setPosition(790, 240); window.draw(note);
+            note.setPosition(790, 240);
+            note.setFillColor(sf::Color::Black); 
+            window.draw(note);
 
             sf::Text help("You can decompress output.huff using the provided CLI tool or via programmatic load.", font, 12);
             help.setPosition(790, 280); help.setFillColor(sf::Color(60, 60, 60));
