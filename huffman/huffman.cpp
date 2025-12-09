@@ -1,7 +1,11 @@
 ﻿// main.cpp
 // Huffman Text Compressor with SFML GUI (tree drawing + stats)
-// Build: C++17, SFML 2.6.x (link sfml-graphics, sfml-window, sfml-system)
-
+// Build: C++17, SFML 2.6.0 (link sfml-graphics, sfml-window, sfml-system)
+//CLASS: BSCS 14-A
+//Group Members:
+//Syed Abbas Raza (517626)
+//Shuja Naveed (502379)
+//github: https://github.com/abbas72O5/DSA_Project_Huffman
 #define _CRT_SECURE_NO_WARNINGS
 
 #include <SFML/Graphics.hpp>
@@ -17,13 +21,13 @@
 
 using namespace std;
 
-// -----------------------------
+
 // Huffman node & BinaryHeap
-// -----------------------------
+
 class HuffmanNode {
 public:
     unsigned char data;
-    uint64_t freq;
+	uint64_t freq;// using uint64 instead of int because frequencies can be much larger than 2 billion (max int range)
     HuffmanNode* left;
     HuffmanNode* right;
 
@@ -35,16 +39,17 @@ public:
 
     HuffmanNode(HuffmanNode* l, HuffmanNode* r) {
         data = 0; // internal node
-        freq = l->freq + r->freq;
+        freq = l->freq + r->freq; 
         left = l;
         right = r;
     }
 
-    bool isLeaf() const { return left == nullptr && right == nullptr; }
+    bool isLeaf()
+    { return left == nullptr && right == nullptr; }
 };
 
 class BinaryHeap {
-    HuffmanNode** arr;
+	HuffmanNode** arr;//pointer to array of pointers to HuffmanNodes
     int rear;
     int capacity;
     int h;
@@ -68,20 +73,23 @@ public:
         else h = (int)floor(log2((double)rear));
     }
 
-    bool isEmpty() { return rear == 0; }
-    int size() { return rear; }
-    int getHeight() { return h; }
+    bool isEmpty()
+    { return rear == 0; }
+    int size()
+    { return rear; }
+    int getHeight()
+    { return h; }
 
-    HuffmanNode* top() {
+	HuffmanNode* top() { // min element
         if (rear == 0) return nullptr;
         return arr[1];
     }
 
-    void push(HuffmanNode* node) {
+	void push(HuffmanNode* node) { //pushing new node into the binary heap
         if (rear + 1 >= capacity) return;
         arr[++rear] = node;
         int i = rear;
-        while (i > 1 && arr[i]->freq < arr[i / 2]->freq) {
+		while (i > 1 && arr[i]->freq < arr[i / 2]->freq) {//heapify up
             swapNodes(i, i / 2);
             i /= 2;
         }
@@ -90,10 +98,10 @@ public:
 
     HuffmanNode* pop() {
         if (rear == 0) return nullptr;
-        HuffmanNode* minNode = arr[1];
-        arr[1] = arr[rear--];
+		HuffmanNode* minNode = arr[1]; //root node popped 
+        arr[1] = arr[rear--];// move last node to root
         int i = 1;
-        while (true) {
+		while (true) {//heapify down
             int left = 2 * i, right = 2 * i + 1;
             int smallest = i;
             if (left <= rear && arr[left]->freq < arr[smallest]->freq) smallest = left;
@@ -106,12 +114,11 @@ public:
         return minNode;
     }
 };
-
-// -----------------------------
-// Module 1: Frequency & Tree
-// -----------------------------
+/*
+      Module 1: Frequency & Tree
+*/
 HuffmanNode* buildHuffmanTree(unsigned char bytes[], uint64_t freqs[], int uniqueCount) {
-    BinaryHeap minHeap(uniqueCount + 5);
+	BinaryHeap minHeap(uniqueCount + 5); // create minheap with extra space
     for (int i = 0; i < uniqueCount; ++i) {
         if (freqs[bytes[i]] > 0) {
             minHeap.push(new HuffmanNode(bytes[i], freqs[bytes[i]]));
@@ -153,18 +160,19 @@ void storeCodesHashMap(HuffmanNode* root,
     storeCodesHashMap(root->right, codeMap, path + "1");// 1 for right
 }
 
-// -----------------------------
-// Module 2: Encoding/Decoding & File I/O
-// -----------------------------
+/*
+ Module 2: Encoding/Decoding & File I/O
+ */
+
 void writeCompressedText(const string& text, const string& outPath,
     unordered_map<unsigned char, string>& codeMap,
     unsigned char bytesPresent[256], uint64_t freqs[256]) {
 
     // compute total bits
     uint64_t totalBits = 0;
-    for (const auto& pair : codeMap) {
-        unsigned char sym = pair.first;
-        totalBits += freqs[sym] * pair.second.length();
+    for (unordered_map<unsigned char, string>::const_iterator it = codeMap.begin(); it != codeMap.end(); ++it) {
+        unsigned char sym = it->first;
+        totalBits += freqs[sym] * it->second.length();
     }
 
     ofstream out(outPath, ios::binary);
@@ -184,7 +192,8 @@ void writeCompressedText(const string& text, const string& outPath,
     }
     out.write(reinterpret_cast<const char*>(&totalBits), sizeof(totalBits));
 
-    // Pack bits into bytes (MSB-first) - NOW WITH O(1) LOOKUP!
+	//writing compressed data in the form of bits packed into bytes in output file
+    // pack bits into bytes (MSB-first) - NOW WITH O(1) LOOKUP!
     uint8_t outByte = 0;
     int outBits = 0;
     for (size_t p = 0; p < text.size(); ++p) {
