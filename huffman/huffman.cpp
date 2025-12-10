@@ -1268,6 +1268,97 @@ int main() {
           
             window.draw(decompressSaveStatus);
             }
+        else if (state == SHOW_DECOMPRESS_TREE) {
+            // Tree area background
+            sf::RectangleShape treeBg(sf::Vector2f(760, 640));
+            treeBg.setPosition(10, 10);
+            treeBg.setFillColor(sf::Color(250, 250, 255));
+            treeBg.setOutlineThickness(1.f);
+            treeBg.setOutlineColor(sf::Color(200, 200, 200));
+            window.draw(treeBg);
+
+            // Draw tree using decompressed tree data
+            drawTreeSFML(window, decompressViz, decompressVizCount, nodeRadius, font, zoomLevel, scrollX, scrollY, maxScrollX, maxScrollY);
+
+            // Draw scrollbars
+            float hTrackWidth = hScrollTrack.getSize().x;
+            float hThumbWidth = max(50.0f, hTrackWidth * (760.f / max(760.f, totalTreeWidth / zoomLevel)));
+            hScrollThumb.setSize(sf::Vector2f(hThumbWidth, 12));
+            hScrollThumb.setPosition(hScrollTrack.getPosition().x + scrollX * (hTrackWidth - hThumbWidth), 653);
+
+            float vTrackHeight = vScrollTrack.getSize().y;
+            float vThumbHeight = max(50.0f, vTrackHeight * (640.f / max(640.f, totalTreeHeight / zoomLevel)));
+            vScrollThumb.setSize(sf::Vector2f(12, vThumbHeight));
+            vScrollThumb.setPosition(758, vScrollTrack.getPosition().y + scrollY * (vTrackHeight - vThumbHeight));
+
+            window.draw(hScrollTrack);
+            window.draw(hScrollThumb);
+            window.draw(vScrollTrack);
+            window.draw(vScrollThumb);
+
+            // Draw zoom controls
+            window.draw(zoomInBtn);
+            window.draw(zoomInTxt);
+            window.draw(zoomOutBtn);
+            window.draw(zoomOutTxt);
+            window.draw(resetViewBtn);
+            window.draw(resetViewTxt);
+
+            // Zoom level display
+            char zoomBuf[64];
+            sprintf_s(zoomBuf, sizeof(zoomBuf), "Zoom: %.1fx", zoomLevel);
+            zoomDisplay.setString(zoomBuf);
+            window.draw(zoomDisplay);
+
+            // Instructions
+            sf::Text instructions("Zoom: Wheel | Pan: Arrows | Scroll: Drag bars", font, 11);
+            instructions.setPosition(15, 15);
+            instructions.setFillColor(sf::Color(50, 50, 50));
+            window.draw(instructions);
+
+            // Right panel: info
+            sf::RectangleShape infoBg(sf::Vector2f(220, 640));
+            infoBg.setPosition(780, 10);
+            infoBg.setFillColor(sf::Color(245, 245, 245));
+            infoBg.setOutlineThickness(1.f);
+            infoBg.setOutlineColor(sf::Color(200, 200, 200));
+            window.draw(infoBg);
+
+            sf::Text stats("Decompressed Tree", font, 16);
+            stats.setPosition(790, 20);
+            stats.setFillColor(sf::Color::Black);
+            window.draw(stats);
+
+            sf::Text info("Tree reconstructed from\ncompressed file header.\n\nThis is the same tree\nused during compression.", font, 12);
+            info.setPosition(790, 60);
+            info.setFillColor(sf::Color::Black);
+            window.draw(info);
+
+            sf::Text note(("Tree nodes: " + to_string(decompressVizCount)), font, 12);
+            note.setPosition(790, 160);
+            note.setFillColor(sf::Color::Black);
+            window.draw(note);
+
+            sf::Text decompFileInfo("Source file:", font, 12);
+            decompFileInfo.setPosition(790, 200);
+            decompFileInfo.setFillColor(sf::Color::Black);
+            window.draw(decompFileInfo);
+
+            // Show filename only
+            string displayPath = decompressInputPath;
+            size_t lastSlash = displayPath.find_last_of("\\/");
+            if (lastSlash != string::npos) {
+                displayPath = displayPath.substr(lastSlash + 1);
+            }
+            sf::Text fileName(displayPath, font, 10);
+            fileName.setPosition(790, 220);
+            fileName.setFillColor(sf::Color(60, 60, 60));
+            window.draw(fileName);
+
+            // Back button
+            window.draw(backToMenuBtn);
+            window.draw(backToMenuTxt);
+            }
 
         window.display();
     }
