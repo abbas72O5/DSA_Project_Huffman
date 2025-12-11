@@ -1,0 +1,5 @@
+﻿  huffman.cpp
+C:\Users\Shuja\source\repos\DSA_HUFFMAN_TREE\DSA_HUFFMAN_TREE\huffman.cpp(193,36): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data
+C:\Users\Shuja\source\repos\DSA_HUFFMAN_TREE\DSA_HUFFMAN_TREE\huffman.cpp(209,36): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data
+C:\Users\Shuja\source\repos\DSA_HUFFMAN_TREE\DSA_HUFFMAN_TREE\huffman.cpp(542,37): warning C4244: '=': conversion from 'int' to 'float', possible loss of data
+  DSA_HUFFMAN_TREE.vcxproj -> C:\Users\Shuja\source\repos\DSA_HUFFMAN_TREE\x64\Debug\DSA_HUFFMAN_TREE.exe
