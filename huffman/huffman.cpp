@@ -1012,23 +1012,82 @@ int main() {
 
             drawTreeSFML(window, viz, vizCount, nodeRadius, font, zoomLevel, scrollX, scrollY, maxScrollX, maxScrollY, currentModule);
 
+
             // Side Panel
             sf::RectangleShape sidePanel(sf::Vector2f(240, 600));
             sidePanel.setFillColor(sf::Color(50, 50, 55));
+            sidePanel.setOutlineColor(sf::Color(100, 100, 100));
+            sidePanel.setOutlineThickness(2.f);
             sidePanel.setPosition(760, 50);
             window.draw(sidePanel);
 
-            // Stats
-            sf::Text stats("Statistics", font, 20);
-            stats.setPosition(780, 70); stats.setStyle(sf::Text::Bold);
-            window.draw(stats);
+            // Stats Title
+            sf::Text statsTitle("Compression Results", font, 20);
+            statsTitle.setFillColor(sf::Color::White);
+            statsTitle.setStyle(sf::Text::Bold);
+            statsTitle.setPosition(780, 70);
+            window.draw(statsTitle);
 
-            sf::Text detail("Original: " + to_string(origBytes) + " B\nCompressed: " + to_string(compBytes) + " B\nRatio: " + to_string(ratio).substr(0, 4) + "%", font, 14);
-            detail.setPosition(780, 120);
-            window.draw(detail);
+            // Module Info
+            string moduleStr = "Module: " + currentModule.name;
+            sf::Text moduleTxt(moduleStr, font, 14);
+            moduleTxt.setFillColor(sf::Color(180, 180, 180));
+            moduleTxt.setPosition(780, 110);
+            window.draw(moduleTxt);
 
-            saveCompressedBtn.setPosition(770, 250);
+            // Calculate detailed stats
+            double compressionRatio = (origBytes > 0) ? ((double)compBytes / (double)origBytes) : 0.0;
+            double spaceSavedPercent = (origBytes > 0) ? (1.0 - compressionRatio) * 100.0 : 0.0;
+            double bitsPerByte = (origBytes > 0) ? ((double)compBytes * 8.0) / (double)origBytes : 0.0;
+
+            // Original Size
+            string origStr = "Original: " + to_string(origBytes) + " bytes";
+            sf::Text origTxt(origStr, font, 14);
+            origTxt.setFillColor(sf::Color::White);
+            origTxt.setPosition(780, 140);
+            window.draw(origTxt);
+
+            // Compressed Size
+            string compStr = "Compressed: " + to_string(compBytes) + " bytes";
+            sf::Text compTxt(compStr, font, 14);
+            compTxt.setFillColor(sf::Color::White);
+            compTxt.setPosition(780, 165);
+            window.draw(compTxt);
+
+            // Compression Ratio
+            string ratioStr = "Compression Ratio: " + to_string(compressionRatio * 100).substr(0, 5) + "%";
+            sf::Text ratioTxt(ratioStr, font, 14);
+            ratioTxt.setFillColor(compBytes < origBytes ? sf::Color(100, 255, 100) : sf::Color(255, 100, 100));
+            ratioTxt.setPosition(780, 190);
+            window.draw(ratioTxt);
+
+            // Space Saved
+            string savedStr = "Space Saved: " + to_string(spaceSavedPercent).substr(0, 5) + "%";
+            sf::Text savedTxt(savedStr, font, 14);
+            savedTxt.setFillColor(sf::Color(100, 200, 255));
+            savedTxt.setPosition(780, 215);
+            window.draw(savedTxt);
+
+            // Efficiency (bits per byte)
+            string effStr = "Bits/Byte: " + to_string(bitsPerByte).substr(0, 5);
+            sf::Text effTxt(effStr, font, 14);
+            effTxt.setFillColor(sf::Color(255, 255, 150));
+            effTxt.setPosition(780, 240);
+            window.draw(effTxt);
+
+            // File Size Difference
+            long long sizeDiff = (long long)origBytes - (long long)compBytes;
+            string diffStr = "Size Reduction: " + to_string(sizeDiff) + " bytes";
+            sf::Text diffTxt(diffStr, font, 14);
+            diffTxt.setFillColor(sizeDiff > 0 ? sf::Color::Green : sf::Color::Red);
+            diffTxt.setPosition(780, 265);
+            window.draw(diffTxt);
+
+            // Adjust button positions - moved down to avoid overlapping with stats
+            saveCompressedBtn.setPosition(770, 350);  // Changed from 250 to 350
             saveCompressedBtn.draw(window);
+
+            saveStatusTxt.setPosition(770, 400);  // Changed from default position
             window.draw(saveStatusTxt);
 
             backToMenuBtn.setPosition(770, 580);
@@ -1061,29 +1120,92 @@ int main() {
             window.draw(titleTxt);
 
             // Stats Panel for Decompression
-            sf::RectangleShape statsPanel(sf::Vector2f(400, 200));
+            sf::RectangleShape statsPanel(sf::Vector2f(500, 280));
             statsPanel.setFillColor(sf::Color(50, 50, 55));
             statsPanel.setOutlineColor(sf::Color(100, 100, 100));
             statsPanel.setOutlineThickness(2.f);
-            statsPanel.setPosition(300, 180);
+            statsPanel.setPosition(250, 160);
             window.draw(statsPanel);
 
-            sf::Text statsTitle("Decompression Statistics", font, 20);
+            sf::Text statsTitle("Decompression Results", font, 24);
             statsTitle.setStyle(sf::Text::Bold);
-            statsTitle.setPosition(320, 200);
+            statsTitle.setFillColor(sf::Color::White);
+            statsTitle.setPosition(270, 180);
             window.draw(statsTitle);
 
-            string statStr = "Compressed Size: " + to_string(decompressInputBytes) + " Bytes\n";
-            statStr += "Decompressed Size: " + to_string(decompressedBytes) + " Bytes\n\n";
-            statStr += "File: " + decompressOutputPath;
+            // Module Info
+            string moduleStr = "Module: " + currentModule.name;
+            sf::Text moduleTxt(moduleStr, font, 16);
+            moduleTxt.setFillColor(sf::Color(180, 180, 180));
+            moduleTxt.setPosition(270, 220);
+            window.draw(moduleTxt);
 
-            sf::Text statsBody(statStr, font, 16);
-            statsBody.setPosition(320, 240);
-            window.draw(statsBody);
+            // Calculate detailed stats
+            double compressionRatioDecompress = (decompressedBytes > 0) ?
+                ((double)decompressInputBytes / (double)decompressedBytes) : 0.0;
+            double spaceSavedDecompress = (decompressedBytes > 0) ?
+                (1.0 - compressionRatioDecompress) * 100.0 : 0.0;
 
+            // Original (Decompressed) Size
+            string decompStr = "Original Size: " + to_string(decompressedBytes) + " bytes";
+            sf::Text decompTxt(decompStr, font, 16);
+            decompTxt.setFillColor(sf::Color::White);
+            decompTxt.setPosition(270, 250);
+            window.draw(decompTxt);
+
+            // Compressed Size
+            string compInputStr = "Compressed Size: " + to_string(decompressInputBytes) + " bytes";
+            sf::Text compInputTxt(compInputStr, font, 16);
+            compInputTxt.setFillColor(sf::Color::White);
+            compInputTxt.setPosition(270, 280);
+            window.draw(compInputTxt);
+
+            // Compression Ratio (from compressed to decompressed)
+            string ratioDecompressStr = "Compression Ratio: " +
+                to_string(compressionRatioDecompress * 100).substr(0, 5) + "%";
+            sf::Text ratioDecompressTxt(ratioDecompressStr, font, 16);
+            ratioDecompressTxt.setFillColor(compressionRatioDecompress < 1.0 ?
+                sf::Color(100, 255, 100) : sf::Color(255, 100, 100));
+            ratioDecompressTxt.setPosition(270, 310);
+            window.draw(ratioDecompressTxt);
+
+            // Space Saved
+            string savedDecompressStr = "Space Saved: " +
+                to_string(spaceSavedDecompress).substr(0, 5) + "%";
+            sf::Text savedDecompressTxt(savedDecompressStr, font, 16);
+            savedDecompressTxt.setFillColor(sf::Color(100, 200, 255));
+            savedDecompressTxt.setPosition(270, 340);
+            window.draw(savedDecompressTxt);
+
+            // File Size Difference
+            long long sizeDiffDecompress = (long long)decompressedBytes -
+                (long long)decompressInputBytes;
+            string diffDecompressStr = "Size Reduction: " +
+                to_string(sizeDiffDecompress) + " bytes";
+            sf::Text diffDecompressTxt(diffDecompressStr, font, 16);
+            diffDecompressTxt.setFillColor(sizeDiffDecompress > 0 ?
+                sf::Color::Green : sf::Color::Red);
+            diffDecompressTxt.setPosition(270, 370);
+            window.draw(diffDecompressTxt);
+
+            // Original File Name
+            string fileNameStr = "Original File: " + decompressOutputPath;
+            sf::Text fileNameTxt(fileNameStr, font, 12);
+            fileNameTxt.setFillColor(sf::Color(150, 150, 150));
+            fileNameTxt.setPosition(270, 400);
+            window.draw(fileNameTxt);
+
+            // Adjust button positions to accommodate larger stats panel
+            saveDecompressedBtn.setPosition(270, 450);
             saveDecompressedBtn.draw(window);
-            showTreeBtn.setPosition(460, 450); showTreeBtn.draw(window);
+
+            showTreeBtn.setPosition(510, 450);
+            showTreeBtn.draw(window);
+
+            backToMenuSmallBtn.setPosition(270, 500);
             backToMenuSmallBtn.draw(window);
+
+            saveStatusTxt.setPosition(270, 550);
             window.draw(saveStatusTxt);
         }
         else if (state == SHOW_DECOMPRESS_TREE) {
