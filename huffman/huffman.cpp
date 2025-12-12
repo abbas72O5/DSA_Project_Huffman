@@ -1,5 +1,10 @@
 ﻿// main.cpp - Complete Huffman Multi-Module Compressor
 // Build: C++17, SFML 2.6.x (link sfml-graphics, sfml-window, sfml-system)
+////CLASS: BSCS 14-A
+//Group Members:
+//Syed Abbas Raza (517626)
+//Shuja Naveed (502379)
+//github: https://github.com/abbas72O5/DSA_Project_Huffman
 
 #define _CRT_SECURE_NO_WARNINGS
 
@@ -16,9 +21,7 @@
 
 using namespace std;
 
-// ===========================
 // MODULE CONFIGURATION
-// ===========================
 enum ModuleType {
     MODULE_NONE,
     MODULE_TEXT,
@@ -52,17 +55,19 @@ struct ModuleConfig {
 
 ModuleConfig modules[3] = {
     {MODULE_TEXT, "Text Files", "Text Files\0*.txt\0All Files\0*.*\0"},
-    {MODULE_AUDIO, "Audio Files", "Audio Files\0*.wav;*.mp3;*.flac;*.aac\0All Files\0*.*\0"},
-    {MODULE_VIDEO, "Video Files", "Video Files\0*.mp4;*.avi;*.mkv;*.mov\0All Files\0*.*\0"}
+    {MODULE_AUDIO, "Audio Files", "Audio Files\0*.wav;.mp3;.flac;.aac\0All Files\0.*\0"},
+    {MODULE_VIDEO, "Video Files", "Video Files\0*.mp4;.avi;.mkv;.mov\0All Files\0.*\0"}
 };
 
-// ===========================
+
 // HUFFMAN CORE LOGIC
-// ===========================
+
+// Huffman node & BinaryHeap
+
 class HuffmanNode {
 public:
     unsigned char data;
-    uint64_t freq;
+    uint64_t freq;// using uint64 instead of int because frequencies can be much larger than 2 billion (max int range)
     HuffmanNode* left;
     HuffmanNode* right;
 
@@ -73,17 +78,20 @@ public:
     }
 
     HuffmanNode(HuffmanNode* l, HuffmanNode* r) {
-        data = 0;
+        data = 0; // internal node
         freq = l->freq + r->freq;
         left = l;
         right = r;
     }
 
-    bool isLeaf() const { return left == nullptr && right == nullptr; }
+    bool isLeaf()
+    {
+        return left == nullptr && right == nullptr;
+    }
 };
 
 class BinaryHeap {
-    HuffmanNode** arr;
+    HuffmanNode** arr;//pointer to array of pointers to HuffmanNodes
     int rear;
     int capacity;
     int h;
@@ -97,25 +105,39 @@ class BinaryHeap {
 public:
     BinaryHeap(int capacity) {
         this->capacity = capacity;
-        arr = new HuffmanNode * [capacity + 2];
+        arr = new HuffmanNode * [capacity + 2]; // 1-based indexing
         rear = 0;
         h = -1;
     }
-    ~BinaryHeap() { delete[] arr; }
 
     void updateHeight() {
         if (rear == 0) h = -1;
         else h = (int)floor(log2((double)rear));
     }
 
-    bool isEmpty() { return rear == 0; }
-    int size() { return rear; }
+    bool isEmpty()
+    {
+        return rear == 0;
+    }
+    int size()
+    {
+        return rear;
+    }
+    int getHeight()
+    {
+        return h;
+    }
 
-    void push(HuffmanNode* node) {
+    HuffmanNode* top() { // min element
+        if (rear == 0) return nullptr;
+        return arr[1];
+    }
+
+    void push(HuffmanNode* node) { //pushing new node into the binary heap
         if (rear + 1 >= capacity) return;
         arr[++rear] = node;
         int i = rear;
-        while (i > 1 && arr[i]->freq < arr[i / 2]->freq) {
+        while (i > 1 && arr[i]->freq < arr[i / 2]->freq) {//heapify up
             swapNodes(i, i / 2);
             i /= 2;
         }
@@ -124,10 +146,10 @@ public:
 
     HuffmanNode* pop() {
         if (rear == 0) return nullptr;
-        HuffmanNode* minNode = arr[1];
-        arr[1] = arr[rear--];
+        HuffmanNode* minNode = arr[1]; //root node popped 
+        arr[1] = arr[rear--];// move last node to root
         int i = 1;
-        while (true) {
+        while (true) {//heapify down
             int left = 2 * i, right = 2 * i + 1;
             int smallest = i;
             if (left <= rear && arr[left]->freq < arr[smallest]->freq) smallest = left;
@@ -141,8 +163,11 @@ public:
     }
 };
 
+/*
+      Fuctional Module 1: Frequency & Tree
+*/
 HuffmanNode* buildHuffmanTree(unsigned char bytes[], uint64_t freqs[], int uniqueCount) {
-    BinaryHeap minHeap(uniqueCount + 5);
+    BinaryHeap minHeap(uniqueCount + 5); // create minheap with extra space
     for (int i = 0; i < uniqueCount; ++i) {
         if (freqs[bytes[i]] > 0) {
             minHeap.push(new HuffmanNode(bytes[i], freqs[bytes[i]]));
@@ -150,7 +175,7 @@ HuffmanNode* buildHuffmanTree(unsigned char bytes[], uint64_t freqs[], int uniqu
     }
 
     if (minHeap.size() == 0) return nullptr;
-
+    // edge-case: only one unique symbol: create dummy sibling
     if (minHeap.size() == 1) {
         HuffmanNode* only = minHeap.pop();
         HuffmanNode* dummy = new HuffmanNode((unsigned char)0, 0);
@@ -166,18 +191,22 @@ HuffmanNode* buildHuffmanTree(unsigned char bytes[], uint64_t freqs[], int uniqu
     }
     return minHeap.pop();
 }
-
+// storing codes using hashmaps for faster O(1) lookup
 void storeCodesHashMap(HuffmanNode* root, unordered_map<unsigned char, string>& codeMap, string path = "") {
     if (!root) return;
 
     if (root->isLeaf()) {
-        codeMap[root->data] = path;
+        codeMap[root->data] = path;// Direct insertion - O(1)
         return;
     }
 
     storeCodesHashMap(root->left, codeMap, path + "0");
     storeCodesHashMap(root->right, codeMap, path + "1");
 }
+
+/*
+ Functional Module 2: Encoding/Decoding & File I/O
+ */
 
 void writeCompressedText(const string& text, const string& outPath,
     unordered_map<unsigned char, string>& codeMap,
@@ -194,6 +223,17 @@ void writeCompressedText(const string& text, const string& outPath,
 
     uint16_t uniq = 0;
     for (int i = 0; i < 256; i++) if (bytesPresent[i]) ++uniq;
+    /* writing header information in output file
+       1. number of unique symbols (2 bytes)
+       2. for each unique symbol: symbol (1 byte) + frequency (8 bytes)
+       3. total bits in compressed data (8 bytes)
+    */
+
+    /*
+    * For small files, the header may take up a significant portion of the compressed file.
+    * This causes the compressed file to be larger than the original.
+    * This is a known limitation of this simple implementation.
+    */
 
     out.write(reinterpret_cast<const char*>(&uniq), sizeof(uniq));
     for (int i = 0; i < 256; i++) {
@@ -205,7 +245,8 @@ void writeCompressedText(const string& text, const string& outPath,
         }
     }
     out.write(reinterpret_cast<const char*>(&totalBits), sizeof(totalBits));
-
+    //writing compressed data in the form of bits packed into bytes in output file
+    // pack bits into bytes (MSB-first) - WITH O(1) LOOKUP using hashmap!
     uint8_t outByte = 0;
     int outBits = 0;
     for (size_t p = 0; p < text.size(); ++p) {
@@ -239,7 +280,10 @@ bool readCompressedAndDecode(const string& inPath, const string& outPath) {
     uint16_t uniq = 0;
     in.read(reinterpret_cast<char*>(&uniq), sizeof(uniq));
     if (!in) return false;
-
+    /*Reading header information:
+    * including number of unique symbols, their frequencies, and total bits
+    * This information is used to reconstruct the Huffman tree for decoding
+    */
     uint64_t freqs[256] = { 0 };
     unsigned char bytesPresent[256] = { 0 };
     for (int i = 0; i < uniq; i++) {
@@ -251,7 +295,7 @@ bool readCompressedAndDecode(const string& inPath, const string& outPath) {
     }
     uint64_t totalBits = 0;
     in.read(reinterpret_cast<char*>(&totalBits), sizeof(totalBits));
-
+    // collect bytes list
     unsigned char bytesList[256];
     int uniqueCount = 0;
     for (int i = 0; i < 256; i++) if (bytesPresent[i]) bytesList[uniqueCount++] = (unsigned char)i;
@@ -261,7 +305,7 @@ bool readCompressedAndDecode(const string& inPath, const string& outPath) {
 
     ofstream out(outPath, ios::binary);
     if (!out) return false;
-
+    // decoding bits into original symbols using the Huffman tree
     uint64_t bitsRead = 0;
     HuffmanNode* node = root;
     char byteBuf;
@@ -282,16 +326,16 @@ bool readCompressedAndDecode(const string& inPath, const string& outPath) {
     return true;
 }
 
-// PART 2: Visualization & Helper Functions
-// Add this after Part 1
-
-struct VizNode {
+/*
+ Functional Module 3: Tree layout & SFML visualization
+ */
+struct VizNode {//tree visualization node
     HuffmanNode* n;
     int x;
     int depth;
     float screenX, screenY;
 };
-
+// assigning x positions using inorder traversal
 void assignPositionsInorder(HuffmanNode* root, int& currentX, int depth, VizNode viz[], int& idx) {
     if (!root) return;
     assignPositionsInorder(root->left, currentX, depth + 1, viz, idx);
@@ -301,17 +345,25 @@ void assignPositionsInorder(HuffmanNode* root, int& currentX, int depth, VizNode
     ++idx;
     assignPositionsInorder(root->right, currentX, depth + 1, viz, idx);
 }
-
+// Draw function with scrollbar support
 void drawTreeSFML(sf::RenderWindow& window, VizNode viz[], int vizCount,
     float nodeRadius, sf::Font& font,
     float zoomLevel, float scrollX, float scrollY,
     float maxScrollX, float maxScrollY, const ModuleConfig& module) {
 
-    float viewportWidth = 760.f;
-    float viewportHeight = 640.f;
+    // Viewport dimensions for the tree area (white box)
+    // Matches the size used in SHOW_RESULT and SHOW_DECOMPRESS_TREE: 740x600
+    float viewportWidth = 740.f;
+    float viewportHeight = 600.f;
+
+    // Position of the viewport on screen (x=10, y=50)
+    float viewportX = 10.f;
+    float viewportY = 50.f;
 
     sf::View treeView(sf::FloatRect(0, 0, viewportWidth / zoomLevel, viewportHeight / zoomLevel));
-    treeView.setViewport(sf::FloatRect(10.f / 1000.f, 10.f / 700.f, 760.f / 1000.f, 640.f / 700.f));
+
+    // SFML Viewport uses normalized coordinates (0..1) relative to window size (1000x700)
+    treeView.setViewport(sf::FloatRect(viewportX / 1000.f, viewportY / 700.f, viewportWidth / 1000.f, viewportHeight / 700.f));
 
     float offsetX = scrollX * maxScrollX;
     float offsetY = scrollY * maxScrollY;
@@ -355,7 +407,7 @@ void drawTreeSFML(sf::RenderWindow& window, VizNode viz[], int vizCount,
     // Draw nodes
     for (int i = 0; i < vizCount; i++) {
         if (!viz[i].n) continue;
-
+        // Different colors for leaf vs internal nodes
         sf::Color nodeColor = viz[i].n->isLeaf() ?
             sf::Color(144, 238, 144) : sf::Color(173, 216, 230);
 
@@ -393,7 +445,7 @@ void drawTreeSFML(sf::RenderWindow& window, VizNode viz[], int vizCount,
 
     window.setView(window.getDefaultView());
 }
-
+// native Windows file dialog
 string openFileDialogWin(const char* filter) {
     OPENFILENAMEA ofn;
     CHAR szFile[MAX_PATH] = { 0 };
@@ -439,18 +491,78 @@ void freeTree(HuffmanNode* root) {
     delete root;
 }
 
-// CONTINUE TO PART 3 (Main Function)...
-// PART 3: Main Function (Beginning)
-// Add this after Part 2
-// PART 3: Main Function (Beginning)
-// Add this after Part 2
+// GUI CLASS (Simple Button Helper)
+class Button {
+public:
+    sf::RectangleShape shape;
+    sf::Text text;
+    sf::Color idleColor;
+    sf::Color hoverColor;
+    bool visible;
 
+    Button(sf::Vector2f size, sf::Vector2f position, string btnText, sf::Font& font, sf::Color idle, sf::Color hover) {
+        shape.setSize(size);
+        shape.setPosition(position);
+        shape.setOutlineThickness(2);
+        shape.setOutlineColor(sf::Color(200, 200, 200));
+        idleColor = idle;
+        hoverColor = hover;
+        shape.setFillColor(idleColor);
+        visible = true;
+
+        text.setFont(font);
+        text.setString(btnText);
+        text.setCharacterSize(18);
+        text.setFillColor(sf::Color::White);
+        text.setStyle(sf::Text::Bold);
+
+        centerText();
+    }
+
+    void centerText() {
+        sf::FloatRect bounds = text.getLocalBounds();
+        text.setOrigin(bounds.left + bounds.width / 2.0f, bounds.top + bounds.height / 2.0f);
+        text.setPosition(shape.getPosition().x + shape.getSize().x / 2.0f, shape.getPosition().y + shape.getSize().y / 2.0f);
+    }
+
+    void setPosition(float x, float y) {
+        shape.setPosition(x, y);
+        centerText();
+    }
+
+    void update(sf::Vector2f mousePos) {
+        if (!visible) return;
+        if (shape.getGlobalBounds().contains(mousePos)) {
+            shape.setFillColor(hoverColor);
+            shape.setOutlineColor(sf::Color::White);
+        }
+        else {
+            shape.setFillColor(idleColor);
+            shape.setOutlineColor(sf::Color(200, 200, 200));
+        }
+    }
+
+    void draw(sf::RenderWindow& window) {
+        if (!visible) return;
+        window.draw(shape);
+        window.draw(text);
+    }
+
+    bool isClicked(sf::Vector2f mousePos) {
+        return visible && shape.getGlobalBounds().contains(mousePos);
+    }
+};
+
+/*
+Main: SFML application + integration
+ */
 int main() {
     sf::RenderWindow window(sf::VideoMode(1000, 700), "Huffman Multi-Module Compressor");
     window.setFramerateLimit(60);
 
     sf::Font font;
     if (!font.loadFromFile("arial.ttf")) {
+        // Fallback or just print error, application might crash if font missing
         cerr << "Warning: could not load arial.ttf\n";
     }
 
@@ -470,48 +582,53 @@ int main() {
     // Current module selection
     ModuleConfig currentModule = modules[0]; // Default: text
 
-    // Main menu buttons
-    sf::RectangleShape startBtn(sf::Vector2f(260, 60));
-    startBtn.setFillColor(sf::Color(120, 180, 255));
-    startBtn.setPosition(370, 220);
-    sf::Text startTxt("Compress Files", font, 20);
-    startTxt.setFillColor(sf::Color::Black);
-    startTxt.setPosition(405, 235);
+    // COLORS
+    sf::Color bgCol(30, 30, 35);
+    sf::Color primaryCol(0, 122, 204);
+    sf::Color primaryHover(28, 151, 234);
+    sf::Color dangerCol(204, 0, 0);
+    sf::Color dangerHover(234, 28, 28);
+    sf::Color successCol(40, 167, 69);
+    sf::Color successHover(60, 187, 89);
+    sf::Color neutralCol(108, 117, 125);
+    sf::Color neutralHover(128, 137, 145);
 
-    sf::RectangleShape decompressBtn(sf::Vector2f(260, 60));
-    decompressBtn.setFillColor(sf::Color(255, 180, 120));
-    decompressBtn.setPosition(370, 300);
-    sf::Text decompressTxt("Decompress Files", font, 20);
-    decompressTxt.setFillColor(sf::Color::Black);
-    decompressTxt.setPosition(395, 315);
+    // BUTTONS
+    Button startBtn({ 280, 60 }, { 360, 220 }, "Compress Files", font, primaryCol, primaryHover);
+    Button decompressBtn({ 280, 60 }, { 360, 300 }, "Decompress Files", font, successCol, successHover);
 
-    // Module selection buttons
-    sf::RectangleShape textModuleBtn(sf::Vector2f(200, 80));
-    textModuleBtn.setFillColor(sf::Color(120, 180, 255));
-    textModuleBtn.setPosition(150, 250);
+    // Module Selection
+    Button textModuleBtn({ 200, 80 }, { 150, 250 }, "Text Files", font, primaryCol, primaryHover);
+    Button audioModuleBtn({ 200, 80 }, { 400, 250 }, "Audio Files", font, dangerCol, dangerHover);
+    Button videoModuleBtn({ 200, 80 }, { 650, 250 }, "Video Files", font, successCol, successHover);
 
-    sf::RectangleShape audioModuleBtn(sf::Vector2f(200, 80));
-    audioModuleBtn.setFillColor(sf::Color(255, 150, 150));
-    audioModuleBtn.setPosition(400, 250);
+    // Navigation
+    Button backBtn({ 150, 40 }, { 425, 450 }, "Back", font, neutralCol, neutralHover);
+    Button selectBtn({ 220, 50 }, { 60, 580 }, "Select File", font, primaryCol, primaryHover);
 
-    sf::RectangleShape videoModuleBtn(sf::Vector2f(200, 80));
-    videoModuleBtn.setFillColor(sf::Color(150, 255, 150));
-    videoModuleBtn.setPosition(650, 250);
+    // Result View Buttons
+    Button saveCompressedBtn({ 220, 40 }, { 770, 320 }, "Save Compressed", font, successCol, successHover);
+    Button backToMenuBtn({ 180, 40 }, { 800, 640 }, "Main Menu", font, neutralCol, neutralHover);
+    Button showTreeBtn({ 220, 40 }, { 270, 560 }, "Show Tree", font, primaryCol, primaryHover);
 
-    sf::RectangleShape backBtn(sf::Vector2f(200, 40));
-    backBtn.setFillColor(sf::Color(200, 200, 200));
-    backBtn.setPosition(400, 450);
+    // Decompress View Buttons
+    Button saveDecompressedBtn({ 220, 40 }, { 220, 550 }, "Save Output", font, successCol, successHover);
+    Button backToMenuSmallBtn({ 180, 40 }, { 460, 550 }, "Back to Menu", font, neutralCol, neutralHover);
 
-    sf::RectangleShape selectBtn(sf::Vector2f(220, 40));
-    selectBtn.setFillColor(sf::Color(160, 220, 160));
-    selectBtn.setPosition(60, 580);
-    sf::Text selectTxt("Select File", font, 18);
-    selectTxt.setPosition(105, 588);
-    selectTxt.setFillColor(sf::Color::Black);
+    // Zoom Controls
+    Button zoomInBtn({ 40, 30 }, { 15, 660 }, "+", font, neutralCol, neutralHover);
+    Button zoomOutBtn({ 40, 30 }, { 65, 660 }, "-", font, neutralCol, neutralHover);
+    Button resetViewBtn({ 80, 30 }, { 115, 660 }, "Reset", font, neutralCol, neutralHover);
 
+    // Text labels
     sf::Text statusTxt("", font, 16);
-    statusTxt.setFillColor(sf::Color::Black);
-    statusTxt.setPosition(60, 520);
+    statusTxt.setFillColor(sf::Color::White);
+    statusTxt.setPosition(60, 530);
+
+    sf::Text titleTxt("Huffman Compressor", font, 32);
+    titleTxt.setFillColor(sf::Color::White);
+    titleTxt.setStyle(sf::Text::Bold);
+    titleTxt.setPosition(340, 50);
 
     // Compression/decompression storage
     string inputPath;
@@ -523,6 +640,7 @@ int main() {
     string decompressInputPath;
     string decompressOutputPath = "decompressed.txt";
     uint64_t decompressedBytes = 0;
+    uint64_t decompressInputBytes = 0; // Added for stats
     bool decompressSuccess = false;
 
     // Tree visualization
@@ -554,98 +672,52 @@ int main() {
 
     sf::RectangleShape hScrollTrack(sf::Vector2f(740, 12));
     hScrollTrack.setPosition(15, 653);
-    hScrollTrack.setFillColor(sf::Color(200, 200, 200));
+    hScrollTrack.setFillColor(sf::Color(60, 60, 65));
     hScrollTrack.setOutlineThickness(1.f);
-    hScrollTrack.setOutlineColor(sf::Color(150, 150, 150));
+    hScrollTrack.setOutlineColor(sf::Color(100, 100, 100));
 
     sf::RectangleShape hScrollThumb(sf::Vector2f(100, 12));
     hScrollThumb.setFillColor(sf::Color(100, 150, 200));
-    hScrollThumb.setOutlineThickness(1.f);
-    hScrollThumb.setOutlineColor(sf::Color(70, 100, 150));
 
     sf::RectangleShape vScrollTrack(sf::Vector2f(12, 620));
     vScrollTrack.setPosition(758, 15);
-    vScrollTrack.setFillColor(sf::Color(200, 200, 200));
+    vScrollTrack.setFillColor(sf::Color(60, 60, 65));
     vScrollTrack.setOutlineThickness(1.f);
-    vScrollTrack.setOutlineColor(sf::Color(150, 150, 150));
+    vScrollTrack.setOutlineColor(sf::Color(100, 100, 100));
 
     sf::RectangleShape vScrollThumb(sf::Vector2f(12, 100));
     vScrollThumb.setFillColor(sf::Color(100, 150, 200));
-    vScrollThumb.setOutlineThickness(1.f);
-    vScrollThumb.setOutlineColor(sf::Color(70, 100, 150));
-
-    // Zoom buttons
-    sf::RectangleShape zoomInBtn(sf::Vector2f(50, 30));
-    zoomInBtn.setFillColor(sf::Color(100, 200, 100));
-    zoomInBtn.setPosition(15, 670);
-
-    sf::Text zoomInTxt("+", font, 20);
-    zoomInTxt.setFillColor(sf::Color::Black);
-    zoomInTxt.setPosition(32, 672);
-
-    sf::RectangleShape zoomOutBtn(sf::Vector2f(50, 30));
-    zoomOutBtn.setFillColor(sf::Color(200, 100, 100));
-    zoomOutBtn.setPosition(70, 670);
-
-    sf::Text zoomOutTxt("-", font, 20);
-    zoomOutTxt.setFillColor(sf::Color::Black);
-    zoomOutTxt.setPosition(88, 672);
-
-    sf::RectangleShape resetViewBtn(sf::Vector2f(80, 30));
-    resetViewBtn.setFillColor(sf::Color(150, 150, 200));
-    resetViewBtn.setPosition(125, 670);
-
-    sf::Text resetViewTxt("Reset", font, 16);
-    resetViewTxt.setFillColor(sf::Color::Black);
-    resetViewTxt.setPosition(138, 675);
 
     sf::Text zoomDisplay("", font, 14);
-    zoomDisplay.setFillColor(sf::Color::Black);
-    zoomDisplay.setPosition(220, 678);
+    zoomDisplay.setFillColor(sf::Color::White);
+    zoomDisplay.setPosition(220, 668);
 
-    // Save buttons
-    sf::RectangleShape saveCompressedBtn(sf::Vector2f(180, 35));
-    saveCompressedBtn.setFillColor(sf::Color(100, 180, 100));
-    saveCompressedBtn.setPosition(790, 320);
-
-    sf::Text saveCompressedTxt("Save Compressed File", font, 14);
-    saveCompressedTxt.setFillColor(sf::Color::Black);
-    saveCompressedTxt.setPosition(800, 328);
-
-    sf::Text saveStatusTxt("", font, 12);
-    saveStatusTxt.setFillColor(sf::Color(0, 120, 0));
-    saveStatusTxt.setPosition(790, 365);
-
-    sf::RectangleShape saveDecompressedBtn(sf::Vector2f(200, 40));
-    saveDecompressedBtn.setFillColor(sf::Color(100, 180, 100));
-    saveDecompressedBtn.setPosition(220, 500);
-
-    sf::Text saveDecompressedTxt("Save Decompressed File", font, 14);
-    saveDecompressedTxt.setFillColor(sf::Color::Black);
-    saveDecompressedTxt.setPosition(235, 510);
-
-    sf::RectangleShape backToMenuBtn(sf::Vector2f(200, 40));
-    backToMenuBtn.setFillColor(sf::Color(150, 150, 200));
-    backToMenuBtn.setPosition(450, 500);
-
-    sf::Text backToMenuTxt("Back to Menu", font, 14);
-    backToMenuTxt.setFillColor(sf::Color::Black);
-    backToMenuTxt.setPosition(495, 510);
-
-    sf::RectangleShape showTreeBtn(sf::Vector2f(260, 40));
-    showTreeBtn.setFillColor(sf::Color(120, 150, 220));
-    showTreeBtn.setPosition(270, 560);
-
-    sf::Text showTreeTxt("Show Huffman Tree", font, 14);
-    showTreeTxt.setFillColor(sf::Color::Black);
-    showTreeTxt.setPosition(310, 570);
-
-    sf::Text decompressSaveStatus("", font, 12);
-    decompressSaveStatus.setFillColor(sf::Color(0, 120, 0));
-    decompressSaveStatus.setPosition(300, 555);
+    sf::Text saveStatusTxt("", font, 14);
+    saveStatusTxt.setFillColor(sf::Color::Green);
+    saveStatusTxt.setPosition(770, 370);
 
     // Main event loop
     while (window.isOpen()) {
+        sf::Vector2i pixelPos = sf::Mouse::getPosition(window);
+        sf::Vector2f mousePos = window.mapPixelToCoords(pixelPos);
+
+        // Update Button Hover States
+        startBtn.update(mousePos);
+        decompressBtn.update(mousePos);
+        textModuleBtn.update(mousePos);
+        audioModuleBtn.update(mousePos);
+        videoModuleBtn.update(mousePos);
+        backBtn.update(mousePos);
+        selectBtn.update(mousePos);
+        saveCompressedBtn.update(mousePos);
+        backToMenuBtn.update(mousePos);
+        showTreeBtn.update(mousePos);
+        saveDecompressedBtn.update(mousePos);
+        backToMenuSmallBtn.update(mousePos);
+        zoomInBtn.update(mousePos);
+        zoomOutBtn.update(mousePos);
+        resetViewBtn.update(mousePos);
+
         sf::Event event;
         while (window.pollEvent(event)) {
             if (event.type == sf::Event::Closed) {
@@ -653,9 +725,6 @@ int main() {
                 if (decompressRoot) { freeTree(decompressRoot); decompressRoot = nullptr; }
                 window.close();
             }
-
-            // PART 4: Event Handling
-// Add after Part 3 (inside the while loop that was started)
 
             // Mouse wheel zoom
             if (event.type == sf::Event::MouseWheelScrolled && (state == SHOW_RESULT || state == SHOW_DECOMPRESS_TREE)) {
@@ -670,31 +739,21 @@ int main() {
 
             // Scrollbar dragging
             if (event.type == sf::Event::MouseButtonPressed && (state == SHOW_RESULT || state == SHOW_DECOMPRESS_TREE)) {
-                sf::Vector2i mp = sf::Mouse::getPosition(window);
-                sf::Vector2f mfp((float)mp.x, (float)mp.y);
-
-                if (hScrollThumb.getGlobalBounds().contains(mfp)) {
-                    isDraggingHScroll = true;
-                }
-                else if (vScrollThumb.getGlobalBounds().contains(mfp)) {
-                    isDraggingVScroll = true;
-                }
+                if (hScrollThumb.getGlobalBounds().contains(mousePos)) isDraggingHScroll = true;
+                else if (vScrollThumb.getGlobalBounds().contains(mousePos)) isDraggingVScroll = true;
             }
 
             if (event.type == sf::Event::MouseButtonReleased) {
                 isDraggingHScroll = false;
                 isDraggingVScroll = false;
-                isDragging = false;
             }
 
             if (event.type == sf::Event::MouseMoved && (state == SHOW_RESULT || state == SHOW_DECOMPRESS_TREE)) {
-                sf::Vector2i mp = sf::Mouse::getPosition(window);
-
                 if (isDraggingHScroll) {
                     float trackLeft = hScrollTrack.getPosition().x;
                     float trackWidth = hScrollTrack.getSize().x;
                     float thumbWidth = hScrollThumb.getSize().x;
-                    float newX = mp.x - thumbWidth / 2.f;
+                    float newX = mousePos.x - thumbWidth / 2.f;
                     newX = max(trackLeft, min(newX, trackLeft + trackWidth - thumbWidth));
                     scrollX = (newX - trackLeft) / (trackWidth - thumbWidth);
                     scrollX = max(0.0f, min(1.0f, scrollX));
@@ -703,139 +762,86 @@ int main() {
                     float trackTop = vScrollTrack.getPosition().y;
                     float trackHeight = vScrollTrack.getSize().y;
                     float thumbHeight = vScrollThumb.getSize().y;
-                    float newY = mp.y - thumbHeight / 2.f;
+                    float newY = mousePos.y - thumbHeight / 2.f;
                     newY = max(trackTop, min(newY, trackTop + trackHeight - thumbHeight));
                     scrollY = (newY - trackTop) / (trackHeight - thumbHeight);
                     scrollY = max(0.0f, min(1.0f, scrollY));
                 }
             }
 
-            // Arrow key scrolling
-            if (event.type == sf::Event::KeyPressed && (state == SHOW_RESULT || state == SHOW_DECOMPRESS_TREE)) {
-                float scrollSpeed = 0.05f;
-                if (event.key.code == sf::Keyboard::Left) scrollX = max(0.0f, scrollX - scrollSpeed);
-                else if (event.key.code == sf::Keyboard::Right) scrollX = min(1.0f, scrollX + scrollSpeed);
-                else if (event.key.code == sf::Keyboard::Up) scrollY = max(0.0f, scrollY - scrollSpeed);
-                else if (event.key.code == sf::Keyboard::Down) scrollY = min(1.0f, scrollY + scrollSpeed);
-            }
+            // Button Click Handling
+            if (event.type == sf::Event::MouseButtonPressed && event.mouseButton.button == sf::Mouse::Left) {
 
-            // Button click events
-            if (event.type == sf::Event::MouseButtonPressed) {
-                sf::Vector2i mp = sf::Mouse::getPosition(window);
-                sf::Vector2f mfp((float)mp.x, (float)mp.y);
+                // GLOBAL BACK/HOME (available in result screens)
+                if ((state == SHOW_RESULT || state == DECOMPRESS_RESULT || state == SHOW_DECOMPRESS_TREE) && backToMenuBtn.isClicked(mousePos)) {
+                    state = MENU;
+                    continue;
+                }
 
-                // MENU state
                 if (state == MENU) {
-                    if (startBtn.getGlobalBounds().contains(mfp)) {
-                        state = MODULE_SELECTION_COMPRESS;
-                    }
-                    else if (decompressBtn.getGlobalBounds().contains(mfp)) {
-                        state = MODULE_SELECTION_DECOMPRESS;
-                    }
+                    if (startBtn.isClicked(mousePos)) state = MODULE_SELECTION_COMPRESS;
+                    else if (decompressBtn.isClicked(mousePos)) state = MODULE_SELECTION_DECOMPRESS;
                 }
-                // MODULE SELECTION FOR COMPRESSION
                 else if (state == MODULE_SELECTION_COMPRESS) {
-                    if (textModuleBtn.getGlobalBounds().contains(mfp)) {
-                        currentModule = modules[0];
-                        state = SELECTING;
-                    }
-                    else if (audioModuleBtn.getGlobalBounds().contains(mfp)) {
-                        currentModule = modules[1];
-                        state = SELECTING;
-                    }
-                    else if (videoModuleBtn.getGlobalBounds().contains(mfp)) {
-                        currentModule = modules[2];
-                        state = SELECTING;
-                    }
-                    else if (backBtn.getGlobalBounds().contains(mfp)) {
-                        state = MENU;
-                    }
+                    if (backBtn.isClicked(mousePos)) state = MENU;
+                    else if (textModuleBtn.isClicked(mousePos)) { currentModule = modules[0]; state = SELECTING; statusTxt.setString(""); }
+                    else if (audioModuleBtn.isClicked(mousePos)) { currentModule = modules[1]; state = SELECTING; statusTxt.setString(""); }
+                    else if (videoModuleBtn.isClicked(mousePos)) { currentModule = modules[2]; state = SELECTING; statusTxt.setString(""); }
                 }
-                // MODULE SELECTION FOR DECOMPRESSION
                 else if (state == MODULE_SELECTION_DECOMPRESS) {
-                    if (textModuleBtn.getGlobalBounds().contains(mfp)) {
-                        currentModule = modules[0];
-                    }
-                    else if (audioModuleBtn.getGlobalBounds().contains(mfp)) {
-                        currentModule = modules[1];
-                    }
-                    else if (videoModuleBtn.getGlobalBounds().contains(mfp)) {
-                        currentModule = modules[2];
-                    }
-                    else if (backBtn.getGlobalBounds().contains(mfp)) {
-                        state = MENU;
-                        continue; // Skip the decompression logic below
-                    }
+                    if (backBtn.isClicked(mousePos)) state = MENU;
+                    else if (textModuleBtn.isClicked(mousePos) || audioModuleBtn.isClicked(mousePos) || videoModuleBtn.isClicked(mousePos)) {
+                        if (textModuleBtn.isClicked(mousePos)) currentModule = modules[0];
+                        if (audioModuleBtn.isClicked(mousePos)) currentModule = modules[1];
+                        if (videoModuleBtn.isClicked(mousePos)) currentModule = modules[2];
 
-                    // IMPORTANT: If we clicked a module button (text/audio/video), 
-                    // then perform decompression. Otherwise, skip.
-                    if (textModuleBtn.getGlobalBounds().contains(mfp) ||
-                        audioModuleBtn.getGlobalBounds().contains(mfp) ||
-                        videoModuleBtn.getGlobalBounds().contains(mfp)) {
-
-                        // Start decompression
+                        // Decompression Logic
                         string picked = openFileDialogWin("Huffman Compressed\0*.huff\0All Files\0*.*\0");
                         if (picked.size()) {
                             decompressInputPath = picked;
-                            state = DECOMPRESSING;
-
-                            // Determine output filename with appropriate extension
-                            size_t lastSlash = decompressInputPath.find_last_of("\\/");
-                            size_t lastDot = decompressInputPath.find_last_of(".");
-                            if (lastSlash != string::npos && lastDot != string::npos && lastDot > lastSlash) {
-                                string baseName = decompressInputPath.substr(lastSlash + 1, lastDot - lastSlash - 1);
-
-                                // Use module-specific extension
-                                switch (currentModule.type) {
-                                case MODULE_TEXT:
-                                    decompressOutputPath = baseName + "_decompressed.txt";
-                                    break;
-                                case MODULE_AUDIO:
-                                    decompressOutputPath = baseName + "_decompressed.wav";
-                                    break;
-                                case MODULE_VIDEO:
-                                    decompressOutputPath = baseName + "_decompressed.mp4";
-                                    break;
-                                default:
-                                    decompressOutputPath = baseName + "_decompressed";
-                                    break;
-                                }
+                            // Measure input file size for stats
+                            ifstream inSize(decompressInputPath, ios::binary | ios::ate);
+                            if (inSize) {
+                                decompressInputBytes = (uint64_t)inSize.tellg();
+                                inSize.close();
                             }
                             else {
-                                // Fallback
-                                decompressOutputPath = "decompressed_output";
+                                decompressInputBytes = 0;
                             }
 
-                            // Read header and rebuild tree
+                            state = DECOMPRESSING;
+                            // ... (Decompression logic same as original, simplified for brevity in this view)
+                            // NOTE: Copied core logic below for completeness
+                            size_t lastSlash = decompressInputPath.find_last_of("\\/");
+                            size_t lastDot = decompressInputPath.find_last_of(".");
+                            string baseName = "output";
+                            if (lastSlash != string::npos && lastDot != string::npos && lastDot > lastSlash)
+                                baseName = decompressInputPath.substr(lastSlash + 1, lastDot - lastSlash - 1);
+
+                            switch (currentModule.type) {
+                            case MODULE_TEXT: decompressOutputPath = baseName + "_decompressed.txt"; break;
+                            case MODULE_AUDIO: decompressOutputPath = baseName + "_decompressed.wav"; break;
+                            case MODULE_VIDEO: decompressOutputPath = baseName + "_decompressed.mp4"; break;
+                            default: decompressOutputPath = baseName + "_decompressed"; break;
+                            }
+
                             ifstream in(decompressInputPath, ios::binary);
                             if (in) {
-                                uint16_t uniq = 0;
-                                in.read(reinterpret_cast<char*>(&uniq), sizeof(uniq));
+                                uint16_t uniq = 0; in.read(reinterpret_cast<char*>(&uniq), sizeof(uniq));
                                 uint64_t decompressFreqs[256] = { 0 };
                                 unsigned char decompressBytesPresent[256] = { 0 };
                                 for (int i = 0; i < uniq; i++) {
                                     uint8_t s; uint64_t f;
-                                    in.read(reinterpret_cast<char*>(&s), sizeof(s));
-                                    in.read(reinterpret_cast<char*>(&f), sizeof(f));
-                                    decompressBytesPresent[s] = 1;
-                                    decompressFreqs[s] = f;
+                                    in.read(reinterpret_cast<char*>(&s), sizeof(s)); in.read(reinterpret_cast<char*>(&f), sizeof(f));
+                                    decompressBytesPresent[s] = 1; decompressFreqs[s] = f;
                                 }
                                 in.close();
-
-                                unsigned char bytesList[256];
-                                int uniqueCount = 0;
-                                for (int i = 0; i < 256; i++)
-                                    if (decompressBytesPresent[i]) bytesList[uniqueCount++] = (unsigned char)i;
-
-                                if (decompressRoot) {
-                                    freeTree(decompressRoot);
-                                    decompressRoot = nullptr;
-                                }
+                                unsigned char bytesList[256]; int uniqueCount = 0;
+                                for (int i = 0; i < 256; i++) if (decompressBytesPresent[i]) bytesList[uniqueCount++] = (unsigned char)i;
+                                if (decompressRoot) { freeTree(decompressRoot); decompressRoot = nullptr; }
                                 decompressRoot = buildHuffmanTree(bytesList, decompressFreqs, uniqueCount);
-
                                 if (decompressRoot) {
-                                    decompressVizCount = 0;
-                                    int curX = 0;
+                                    decompressVizCount = 0; int curX = 0;
                                     assignPositionsInorder(decompressRoot, curX, 0, decompressViz, decompressVizCount);
                                     int maxDepth = 0, maxX = 0;
                                     for (int i = 0; i < decompressVizCount; i++) {
@@ -852,18 +858,13 @@ int main() {
                                     }
                                     maxScrollX = max(0.0f, totalTreeWidth - 760.f / zoomLevel);
                                     maxScrollY = max(0.0f, totalTreeHeight - 640.f / zoomLevel);
-                                    scrollX = scrollY = 0.0f;
-                                    zoomLevel = 1.0f;
+                                    scrollX = scrollY = 0.0f; zoomLevel = 1.0f;
                                 }
                             }
-
                             decompressSuccess = readCompressedAndDecode(decompressInputPath, decompressOutputPath);
                             if (decompressSuccess) {
                                 ifstream fin(decompressOutputPath, ios::binary | ios::ate);
-                                if (fin) {
-                                    decompressedBytes = (uint64_t)fin.tellg();
-                                    fin.close();
-                                }
+                                if (fin) { decompressedBytes = (uint64_t)fin.tellg(); fin.close(); }
                                 state = DECOMPRESS_RESULT;
                             }
                             else {
@@ -873,563 +874,274 @@ int main() {
                         }
                     }
                 }
-
-                // PART 5: Compression Event Handling
- // Continues from Part 4
-
-                 // SELECTING state - file selection for compression
                 else if (state == SELECTING) {
-                     if (selectBtn.getGlobalBounds().contains(mfp)) {
-                         string picked = openFileDialogWin(currentModule.fileFilter.c_str());
-                         if (picked.size()) {
-                             inputPath = picked;
-                             state = PROCESSING;
+                    if (backBtn.isClicked(mousePos)) state = MODULE_SELECTION_COMPRESS;
+                    else if (selectBtn.isClicked(mousePos)) {
+                        string picked = openFileDialogWin(currentModule.fileFilter.c_str());
+                        if (picked.size()) {
+                            inputPath = picked;
+                            state = PROCESSING; // Logic continues in main loop update
 
-                             ifstream fin(inputPath, ios::binary);
-                             if (!fin) {
-                                 statusTxt.setString("Error reading file.");
-                                 state = SELECTING;
-                                 break;
-                             }
-                             string text((istreambuf_iterator<char>(fin)), istreambuf_iterator<char>());
-                             fin.close();
-                             origBytes = text.size();
+                            ifstream fin(inputPath, ios::binary);
+                            if (!fin) { statusTxt.setString("Error reading file."); state = SELECTING; }
+                            else {
+                                string text((istreambuf_iterator<char>(fin)), istreambuf_iterator<char>());
+                                fin.close();
+                                origBytes = text.size();
+                                uint64_t freqs[256] = { 0 };
+                                unsigned char bytesList[256];
+                                unsigned char bytesPresent[256] = { 0 };
+                                for (size_t i = 0; i < text.size(); ++i) {
+                                    unsigned char c = (unsigned char)text[i];
+                                    freqs[c]++; bytesPresent[c] = 1;
+                                }
+                                int uniqueCount = 0;
+                                for (int i = 0; i < 256; i++) if (bytesPresent[i]) bytesList[uniqueCount++] = (unsigned char)i;
+                                HuffmanNode* root = buildHuffmanTree(bytesList, freqs, uniqueCount);
+                                if (!root) { statusTxt.setString("File empty or unreadable."); state = SELECTING; }
+                                else {
+                                    if (savedRoot) freeTree(savedRoot);
+                                    savedRoot = root;
+                                    unordered_map<unsigned char, string> codeMap;
+                                    storeCodesHashMap(root, codeMap);
+                                    writeCompressedText(text, compressedPath, codeMap, bytesPresent, freqs);
 
-                             uint64_t freqs[256] = { 0 };
-                             unsigned char bytesList[256];
-                             unsigned char bytesPresent[256] = { 0 };
-                             for (size_t i = 0; i < text.size(); ++i) {
-                                 unsigned char c = (unsigned char)text[i];
-                                 freqs[c]++;
-                                 bytesPresent[c] = 1;
-                             }
-                             int uniqueCount = 0;
-                             for (int i = 0; i < 256; i++)
-                                 if (bytesPresent[i]) bytesList[uniqueCount++] = (unsigned char)i;
+                                    // Viz setup
+                                    vizCount = 0; int curX = 0;
+                                    assignPositionsInorder(root, curX, 0, viz, vizCount);
+                                    int maxDepth = 0, maxX = 0;
+                                    for (int i = 0; i < vizCount; i++) {
+                                        if (viz[i].depth > maxDepth) maxDepth = viz[i].depth;
+                                        if (viz[i].x > maxX) maxX = viz[i].x;
+                                    }
+                                    float minSpacingX = 30.f, minSpacingY = 120.f;
+                                    totalTreeWidth = (maxX + 1) * minSpacingX;
+                                    totalTreeHeight = (maxDepth + 1) * minSpacingY;
+                                    float offsetX = 50.f, offsetY = 50.f;
+                                    for (int i = 0; i < vizCount; i++) {
+                                        viz[i].screenX = offsetX + viz[i].x * minSpacingX;
+                                        viz[i].screenY = offsetY + viz[i].depth * minSpacingY;
+                                    }
+                                    maxScrollX = max(0.0f, totalTreeWidth - 760.f / zoomLevel);
+                                    maxScrollY = max(0.0f, totalTreeHeight - 640.f / zoomLevel);
+                                    scrollX = scrollY = 0.0f; zoomLevel = 1.0f;
 
-                             HuffmanNode* root = buildHuffmanTree(bytesList, freqs, uniqueCount);
-                             if (!root) {
-                                 statusTxt.setString("File empty or unreadable.");
-                                 state = SELECTING;
-                                 break;
-                             }
-
-                             unordered_map<unsigned char, string> codeMap;
-                             storeCodesHashMap(root, codeMap);
-                             writeCompressedText(text, compressedPath, codeMap, bytesPresent, freqs);
-
-                             compBytes = 0;
-                             {
-                                 ifstream fin2(compressedPath, ios::binary | ios::ate);
-                                 if (fin2) compBytes = (uint64_t)fin2.tellg();
-                             }
-                             ratio = (origBytes > 0) ? ((double)compBytes / (double)origBytes) : 0.0;
-
-                             vizCount = 0;
-                             int curX = 0;
-                             assignPositionsInorder(root, curX, 0, viz, vizCount);
-
-                             int maxDepth = 0;
-                             int maxX = 0;
-                             for (int i = 0; i < vizCount; i++) {
-                                 if (viz[i].depth > maxDepth) maxDepth = viz[i].depth;
-                                 if (viz[i].x > maxX) maxX = viz[i].x;
-                             }
-
-                             float minSpacingX = 30.f;
-                             float minSpacingY = 120.f;
-                             totalTreeWidth = (maxX + 1) * minSpacingX;
-                             totalTreeHeight = (maxDepth + 1) * minSpacingY;
-                             float offsetX = 50.f;
-                             float offsetY = 50.f;
-
-                             for (int i = 0; i < vizCount; i++) {
-                                 viz[i].screenX = offsetX + viz[i].x * minSpacingX;
-                                 viz[i].screenY = offsetY + viz[i].depth * minSpacingY;
-                             }
-
-                             nodeRadius = 22.f;
-                             maxScrollX = max(0.0f, totalTreeWidth - 760.f / zoomLevel);
-                             maxScrollY = max(0.0f, totalTreeHeight - 640.f / zoomLevel);
-                             scrollX = 0.0f;
-                             scrollY = 0.0f;
-                             zoomLevel = 1.0f;
-
-                             processed = true;
-                             if (savedRoot) { freeTree(savedRoot); savedRoot = nullptr; }
-                             savedRoot = root;
-
-                             state = SHOW_RESULT;
-                         }
-                     }
-                     }
-                     // SHOW_RESULT state - compression results
-                else if (state == SHOW_RESULT) {
-                         if (zoomInBtn.getGlobalBounds().contains(mfp)) {
-                             zoomLevel *= 1.2f;
-                             if (zoomLevel > 5.0f) zoomLevel = 5.0f;
-                             maxScrollX = max(0.0f, totalTreeWidth - 760.f / zoomLevel);
-                             maxScrollY = max(0.0f, totalTreeHeight - 640.f / zoomLevel);
-                         }
-                         else if (zoomOutBtn.getGlobalBounds().contains(mfp)) {
-                             zoomLevel *= 0.8f;
-                             if (zoomLevel < 0.1f) zoomLevel = 0.1f;
-                             maxScrollX = max(0.0f, totalTreeWidth - 760.f / zoomLevel);
-                             maxScrollY = max(0.0f, totalTreeHeight - 640.f / zoomLevel);
-                         }
-                         else if (resetViewBtn.getGlobalBounds().contains(mfp)) {
-                             zoomLevel = 1.0f;
-                             scrollX = 0.0f;
-                             scrollY = 0.0f;
-                             maxScrollX = max(0.0f, totalTreeWidth - 760.f);
-                             maxScrollY = max(0.0f, totalTreeHeight - 640.f);
-                         }
-                         else if (saveCompressedBtn.getGlobalBounds().contains(mfp)) {
-                             saveStatusTxt.setString("");
-                             string suggestedName = "compressed.huff";
-                             if (!inputPath.empty()) {
-                                 size_t lastSlash = inputPath.find_last_of("\\/");
-                                 size_t lastDot = inputPath.find_last_of(".");
-                                 if (lastSlash != string::npos && lastDot != string::npos && lastDot > lastSlash) {
-                                     string baseName = inputPath.substr(lastSlash + 1, lastDot - lastSlash - 1);
-                                     suggestedName = baseName + ".huff";
-                                 }
-                             }
-                             string savePath = saveFileDialogWin("Huffman Compressed\0*.huff\0All Files\0*.*\0",
-                                 suggestedName.c_str());
-                             if (!savePath.empty()) {
-                                 ifstream src("output.huff", ios::binary);
-                                 ofstream dst(savePath, ios::binary);
-                                 if (src && dst) {
-                                     dst << src.rdbuf();
-                                     src.close();
-                                     dst.close();
-                                     saveStatusTxt.setString("Saved successfully!");
-                                     saveStatusTxt.setFillColor(sf::Color(0, 120, 0));
-                                     compressedPath = savePath;
-                                 }
-                                 else {
-                                     saveStatusTxt.setString("Error: Could not save.");
-                                     saveStatusTxt.setFillColor(sf::Color(200, 0, 0));
-                                 }
-                             }
-                         }
-                         }
-
-                         // PART 6: Continue Event Handling
-
-                   // DECOMPRESS_RESULT state
-                else if (state == DECOMPRESS_RESULT) {
-                    if (saveDecompressedBtn.getGlobalBounds().contains(mfp)) {
-                        string defaultName = "decompressed.txt";
-                        if (!decompressInputPath.empty()) {
-                            size_t lastSlash = decompressInputPath.find_last_of("\\/");
-                            size_t lastDot = decompressInputPath.find_last_of(".");
-                            if (lastSlash != string::npos && lastDot != string::npos && lastDot > lastSlash) {
-                                string baseName = decompressInputPath.substr(lastSlash + 1, lastDot - lastSlash - 1);
-                                defaultName = baseName + "_decompressed.txt";
+                                    ifstream cfin(compressedPath, ios::binary | ios::ate);
+                                    compBytes = (uint64_t)cfin.tellg(); cfin.close();
+                                    ratio = 100.0 * (1.0 - (double)compBytes / (double)origBytes);
+                                    state = SHOW_RESULT;
+                                }
                             }
                         }
-                        string savePath = saveFileDialogWin("All Files\0*.*\0", defaultName.c_str());
-                        if (!savePath.empty()) {
+                    }
+                }
+                else if (state == SHOW_RESULT) {
+                    if (backToMenuBtn.isClicked(mousePos)) state = MENU;
+                    else if (showTreeBtn.isClicked(mousePos)) { /* Toggle tree view or stays in same state but draws differently? */ }
+                    else if (saveCompressedBtn.isClicked(mousePos)) {
+                        string savePath = saveFileDialogWin("Huffman Compressed\0*.huff\0All Files\0*.*\0");
+                        if (savePath.size()) {
+                            // Copy file
+                            ifstream src(compressedPath, ios::binary);
+                            ofstream dst(savePath, ios::binary);
+                            dst << src.rdbuf();
+                            saveStatusTxt.setString("Saved to " + savePath);
+                        }
+                    }
+                }
+                else if (state == DECOMPRESS_RESULT) {
+                    if (backToMenuSmallBtn.isClicked(mousePos)) state = MENU;
+                    else if (showTreeBtn.isClicked(mousePos)) state = SHOW_DECOMPRESS_TREE;
+                    else if (saveDecompressedBtn.isClicked(mousePos)) {
+                        string savePath = saveFileDialogWin("All Files\0*.*\0");
+                        if (savePath.size()) {
                             ifstream src(decompressOutputPath, ios::binary);
                             ofstream dst(savePath, ios::binary);
-                            if (src && dst) {
-                                dst << src.rdbuf();
-                                src.close();
-                                dst.close();
-                                decompressSaveStatus.setString("Saved successfully!");
-                                decompressSaveStatus.setFillColor(sf::Color(0, 120, 0));
-                                decompressOutputPath = savePath;
-                            }
-                            else {
-                                decompressSaveStatus.setString("Error: Could not save.");
-                                decompressSaveStatus.setFillColor(sf::Color(200, 0, 0));
-                            }
+                            dst << src.rdbuf();
+                            saveStatusTxt.setString("Saved!");
                         }
                     }
-                    else if (backToMenuBtn.getGlobalBounds().contains(mfp)) {
-                        state = MENU;
-                    }
-                    else if (showTreeBtn.getGlobalBounds().contains(mfp)) {
-                        state = SHOW_DECOMPRESS_TREE;
-                    }
-}
-
-// SHOW_DECOMPRESS_TREE state - similar to SHOW_RESULT but for decompression tree
+                }
                 else if (state == SHOW_DECOMPRESS_TREE) {
-                    if (zoomInBtn.getGlobalBounds().contains(mfp)) {
-                        zoomLevel *= 1.2f;
-                        if (zoomLevel > 5.0f) zoomLevel = 5.0f;
-                        maxScrollX = max(0.0f, totalTreeWidth - 760.f / zoomLevel);
-                        maxScrollY = max(0.0f, totalTreeHeight - 640.f / zoomLevel);
-                    }
-                    else if (zoomOutBtn.getGlobalBounds().contains(mfp)) {
-                        zoomLevel *= 0.8f;
-                        if (zoomLevel < 0.1f) zoomLevel = 0.1f;
-                        maxScrollX = max(0.0f, totalTreeWidth - 760.f / zoomLevel);
-                        maxScrollY = max(0.0f, totalTreeHeight - 640.f / zoomLevel);
-                    }
-                    else if (resetViewBtn.getGlobalBounds().contains(mfp)) {
-                        zoomLevel = 1.0f;
-                        scrollX = 0.0f;
-                        scrollY = 0.0f;
-                        maxScrollX = max(0.0f, totalTreeWidth - 760.f);
-                        maxScrollY = max(0.0f, totalTreeHeight - 640.f);
-                    }
-                    else if (backToMenuBtn.getGlobalBounds().contains(mfp)) {
-                        state = DECOMPRESS_RESULT;
-                    }
-                    }
-} // End of mouse button pressed
+                    if (backToMenuBtn.isClicked(mousePos)) state = DECOMPRESS_RESULT; // Go back to result view first
+                    else if (zoomInBtn.isClicked(mousePos)) zoomLevel = min(5.0f, zoomLevel * 1.1f);
+                    else if (zoomOutBtn.isClicked(mousePos)) zoomLevel = max(0.1f, zoomLevel * 0.9f);
+                    else if (resetViewBtn.isClicked(mousePos)) { zoomLevel = 1.0f; scrollX = 0; scrollY = 0; }
+                }
+            }
+        }
 
-// Mouse drag for panning (only in tree view states)
-if ((state == SHOW_RESULT || state == SHOW_DECOMPRESS_TREE) && event.type == sf::Event::MouseButtonPressed) {
-    sf::Vector2i mp = sf::Mouse::getPosition(window);
-    sf::Vector2f mfp((float)mp.x, (float)mp.y);
+        // RENDER
+        window.clear(bgCol);
 
-    // Check if mouse is in tree view area and not on scrollbars or buttons
-    if (mfp.x >= 10 && mfp.x <= 770 && mfp.y >= 10 && mfp.y <= 650 &&
-        !hScrollThumb.getGlobalBounds().contains(mfp) &&
-        !vScrollThumb.getGlobalBounds().contains(mfp) &&
-        !zoomInBtn.getGlobalBounds().contains(mfp) &&
-        !zoomOutBtn.getGlobalBounds().contains(mfp) &&
-        !resetViewBtn.getGlobalBounds().contains(mfp)) {
-        isDragging = true;
-        lastMousePos = mp;
-    }
-}
-if (event.type == sf::Event::MouseMoved && isDragging) {
-    sf::Vector2i currentMousePos = sf::Mouse::getPosition(window);
-    int deltaX = currentMousePos.x - lastMousePos.x;
-    int deltaY = currentMousePos.y - lastMousePos.y;
+        if (state == MENU) {
+            titleTxt.setString("Huffman Multi-Module Compressor");
+            titleTxt.setPosition(260, 100);
+            window.draw(titleTxt);
+            startBtn.draw(window);
+            decompressBtn.draw(window);
+        }
+        else if (state == MODULE_SELECTION_COMPRESS || state == MODULE_SELECTION_DECOMPRESS) {
+            titleTxt.setString(state == MODULE_SELECTION_COMPRESS ? "Select Module to Compress" : "Select Module to Decompress");
+            titleTxt.setPosition(280, 100);
+            window.draw(titleTxt);
+            textModuleBtn.draw(window);
+            audioModuleBtn.draw(window);
+            videoModuleBtn.draw(window);
+            backBtn.draw(window);
+        }
+        else if (state == SELECTING) {
+            titleTxt.setString("Select " + currentModule.name);
+            titleTxt.setPosition(350, 100);
+            window.draw(titleTxt);
+            statusTxt.setPosition(350, 400);
+            window.draw(statusTxt);
+            selectBtn.setPosition(390, 300);
+            selectBtn.draw(window);
+            backBtn.setPosition(425, 450);
+            backBtn.draw(window);
+        }
+        else if (state == SHOW_RESULT) {
+            // Layout: Tree on Left/Center, Info Panel on Right
 
-    // Adjust scroll based on drag
-    if (state == SHOW_RESULT || state == SHOW_DECOMPRESS_TREE) {
-        float dragFactor = 0.5f;
-        scrollX -= (deltaX * dragFactor) / (maxScrollX * zoomLevel + 1.0f);
-        scrollY -= (deltaY * dragFactor) / (maxScrollY * zoomLevel + 1.0f);
-        scrollX = max(0.0f, min(1.0f, scrollX));
-        scrollY = max(0.0f, min(1.0f, scrollY));
-    }
+            // Draw Tree Area
+            sf::RectangleShape treeArea(sf::Vector2f(740, 600));
+            treeArea.setFillColor(sf::Color::White);
+            treeArea.setPosition(10, 50);
+            window.draw(treeArea);
 
-    lastMousePos = currentMousePos;
-}
-} // End of event polling
+            drawTreeSFML(window, viz, vizCount, nodeRadius, font, zoomLevel, scrollX, scrollY, maxScrollX, maxScrollY, currentModule);
 
-// Update UI elements
-zoomDisplay.setString("Zoom: " + to_string((int)(zoomLevel * 100)) + "%");
-hScrollThumb.setPosition(15 + scrollX * (hScrollTrack.getSize().x - hScrollThumb.getSize().x), 653);
-vScrollThumb.setPosition(758, 15 + scrollY * (vScrollTrack.getSize().y - vScrollThumb.getSize().y));
+            // Side Panel
+            sf::RectangleShape sidePanel(sf::Vector2f(240, 600));
+            sidePanel.setFillColor(sf::Color(50, 50, 55));
+            sidePanel.setPosition(760, 50);
+            window.draw(sidePanel);
 
-// Clear window
-window.clear(sf::Color(240, 240, 245));
+            // Stats
+            sf::Text stats("Statistics", font, 20);
+            stats.setPosition(780, 70); stats.setStyle(sf::Text::Bold);
+            window.draw(stats);
 
-// Draw based on state
-if (state == MENU) {
-    window.draw(startBtn);
-    window.draw(startTxt);
-    window.draw(decompressBtn);
-    window.draw(decompressTxt);
+            sf::Text detail("Original: " + to_string(origBytes) + " B\nCompressed: " + to_string(compBytes) + " B\nRatio: " + to_string(ratio).substr(0, 4) + "%", font, 14);
+            detail.setPosition(780, 120);
+            window.draw(detail);
 
-    // Draw title
-    sf::Text title("Huffman Multi-Module Compressor", font, 28);
-    title.setFillColor(sf::Color::Black);
-    title.setPosition(250, 120);
-    window.draw(title);
+            saveCompressedBtn.setPosition(770, 250);
+            saveCompressedBtn.draw(window);
+            window.draw(saveStatusTxt);
 
-    sf::Text subtitle("Select an option below", font, 18);
-    subtitle.setFillColor(sf::Color(80, 80, 80));
-    subtitle.setPosition(400, 180);
-    window.draw(subtitle);
-}
-else if (state == MODULE_SELECTION_COMPRESS) {
-    sf::Text header("Select Module for Compression", font, 24);
-    header.setFillColor(sf::Color::Black);
-    header.setPosition(320, 150);
-    window.draw(header);
+            backToMenuBtn.setPosition(770, 580);
+            backToMenuBtn.draw(window);
 
-    window.draw(textModuleBtn);
-    sf::Text textTxt("Text\nFiles", font, 18);
-    textTxt.setFillColor(sf::Color::Black);
-    textTxt.setPosition(215, 270);
-    window.draw(textTxt);
+            // Zoom controls
+            zoomInBtn.setPosition(20, 660); zoomInBtn.draw(window);
+            zoomOutBtn.setPosition(70, 660); zoomOutBtn.draw(window);
+            resetViewBtn.setPosition(120, 660); resetViewBtn.draw(window);
 
-    window.draw(audioModuleBtn);
-    sf::Text audioTxt("Audio\nFiles", font, 18);
-    audioTxt.setFillColor(sf::Color::Black);
-    audioTxt.setPosition(465, 270);
-    window.draw(audioTxt);
+            // Scrollbars
+            if (maxScrollX > 0.0f) {
+                float thumbWidth = hScrollTrack.getSize().x * (hScrollTrack.getSize().x / totalTreeWidth);
+                if (thumbWidth < 30) thumbWidth = 30;
+                hScrollThumb.setSize(sf::Vector2f(thumbWidth, 12));
+                hScrollThumb.setPosition(hScrollTrack.getPosition().x + scrollX * (hScrollTrack.getSize().x - thumbWidth), hScrollTrack.getPosition().y);
+                window.draw(hScrollTrack); window.draw(hScrollThumb);
+            }
+            if (maxScrollY > 0.0f) {
+                float thumbHeight = vScrollTrack.getSize().y * (vScrollTrack.getSize().y / totalTreeHeight);
+                if (thumbHeight < 30) thumbHeight = 30;
+                vScrollThumb.setSize(sf::Vector2f(12, thumbHeight));
+                vScrollThumb.setPosition(vScrollTrack.getPosition().x, vScrollTrack.getPosition().y + scrollY * (vScrollTrack.getSize().y - thumbHeight));
+                window.draw(vScrollTrack); window.draw(vScrollThumb);
+            }
+        }
+        else if (state == DECOMPRESS_RESULT) {
+            titleTxt.setString("Decompression Successful!");
+            titleTxt.setPosition(300, 100);
+            window.draw(titleTxt);
 
-    window.draw(videoModuleBtn);
-    sf::Text videoTxt("Video\nFiles", font, 18);
-    videoTxt.setFillColor(sf::Color::Black);
-    videoTxt.setPosition(715, 270);
-    window.draw(videoTxt);
+            // Stats Panel for Decompression
+            sf::RectangleShape statsPanel(sf::Vector2f(400, 200));
+            statsPanel.setFillColor(sf::Color(50, 50, 55));
+            statsPanel.setOutlineColor(sf::Color(100, 100, 100));
+            statsPanel.setOutlineThickness(2.f);
+            statsPanel.setPosition(300, 180);
+            window.draw(statsPanel);
 
-    window.draw(backBtn);
-    sf::Text backTxt("Back to Menu", font, 16);
-    backTxt.setFillColor(sf::Color::Black);
-    backTxt.setPosition(450, 460);
-    window.draw(backTxt);
-}
-else if (state == MODULE_SELECTION_DECOMPRESS) {
-    sf::Text header("Select Module for Decompression", font, 24);
-    header.setFillColor(sf::Color::Black);
-    header.setPosition(300, 150);
-    window.draw(header);
+            sf::Text statsTitle("Decompression Statistics", font, 20);
+            statsTitle.setStyle(sf::Text::Bold);
+            statsTitle.setPosition(320, 200);
+            window.draw(statsTitle);
 
-    window.draw(textModuleBtn);
-    sf::Text textTxt("Text\nFiles", font, 18);
-    textTxt.setFillColor(sf::Color::Black);
-    textTxt.setPosition(215, 270);
-    window.draw(textTxt);
+            string statStr = "Compressed Size: " + to_string(decompressInputBytes) + " Bytes\n";
+            statStr += "Decompressed Size: " + to_string(decompressedBytes) + " Bytes\n\n";
+            statStr += "File: " + decompressOutputPath;
 
-    window.draw(audioModuleBtn);
-    sf::Text audioTxt("Audio\nFiles", font, 18);
-    audioTxt.setFillColor(sf::Color::Black);
-    audioTxt.setPosition(465, 270);
-    window.draw(audioTxt);
+            sf::Text statsBody(statStr, font, 16);
+            statsBody.setPosition(320, 240);
+            window.draw(statsBody);
 
-    window.draw(videoModuleBtn);
-    sf::Text videoTxt("Video\nFiles", font, 18);
-    videoTxt.setFillColor(sf::Color::Black);
-    videoTxt.setPosition(715, 270);
-    window.draw(videoTxt);
+            saveDecompressedBtn.draw(window);
+            showTreeBtn.setPosition(460, 450); showTreeBtn.draw(window);
+            backToMenuSmallBtn.draw(window);
+            window.draw(saveStatusTxt);
+        }
+        else if (state == SHOW_DECOMPRESS_TREE) {
+            // Layout: Tree on Left/Center, Info Panel on Right (Consistent with SHOW_RESULT)
 
-    window.draw(backBtn);
-    sf::Text backTxt("Back to Menu", font, 16);
-    backTxt.setFillColor(sf::Color::Black);
-    backTxt.setPosition(450, 460);
-    window.draw(backTxt);
-}
-else if (state == SELECTING) {
-    sf::RectangleShape bg(sf::Vector2f(600, 200));
-    bg.setFillColor(sf::Color(255, 255, 255));
-    bg.setOutlineColor(sf::Color(180, 180, 180));
-    bg.setOutlineThickness(2.f);
-    bg.setPosition(200, 200);
-    window.draw(bg);
+            // Draw Tree Area
+            sf::RectangleShape treeArea(sf::Vector2f(740, 600));
+            treeArea.setFillColor(sf::Color::White);
+            treeArea.setPosition(10, 50);
+            window.draw(treeArea);
 
-    sf::Text prompt("Selected Module: " + currentModule.name, font, 20);
-    prompt.setFillColor(sf::Color::Black);
-    prompt.setPosition(250, 220);
-    window.draw(prompt);
+            drawTreeSFML(window, decompressViz, decompressVizCount, nodeRadius, font, zoomLevel, scrollX, scrollY, maxScrollX, maxScrollY, currentModule);
 
-    sf::Text desc("Click below to select a file", font, 16);
-    desc.setFillColor(sf::Color(80, 80, 80));
-    desc.setPosition(320, 260);
-    window.draw(desc);
+            // Side Panel
+            sf::RectangleShape sidePanel(sf::Vector2f(240, 600));
+            sidePanel.setFillColor(sf::Color(50, 50, 55));
+            sidePanel.setPosition(760, 50);
+            window.draw(sidePanel);
 
-    window.draw(selectBtn);
-    window.draw(selectTxt);
+            // Stats in side panel
+            sf::Text stats("Info", font, 20);
+            stats.setPosition(780, 70); stats.setStyle(sf::Text::Bold);
+            window.draw(stats);
 
-    window.draw(statusTxt);
+            sf::Text detail("Viewing Decompression Tree\n\nScroll/Zoom to navigate.", font, 14);
+            detail.setPosition(780, 120);
+            window.draw(detail);
 
-    window.draw(backBtn);
-    sf::Text backTxt("Back", font, 16);
-    backTxt.setFillColor(sf::Color::Black);
-    backTxt.setPosition(470, 460);
-    window.draw(backTxt);
-}
-else if (state == SHOW_RESULT) {
-    // Draw tree area background
-    sf::RectangleShape treeArea(sf::Vector2f(760, 640));
-    treeArea.setFillColor(sf::Color(255, 255, 255));
-    treeArea.setOutlineColor(sf::Color(180, 180, 180));
-    treeArea.setOutlineThickness(2.f);
-    treeArea.setPosition(10, 10);
-    window.draw(treeArea);
+            backToMenuBtn.setPosition(770, 580);
+            backToMenuBtn.draw(window);
 
-    // Draw tree with current module's labeling
-    drawTreeSFML(window, viz, vizCount, nodeRadius, font, zoomLevel,
-        scrollX, scrollY, maxScrollX, maxScrollY, currentModule);
+            // Zoom controls
+            zoomInBtn.setPosition(20, 660); zoomInBtn.draw(window);
+            zoomOutBtn.setPosition(70, 660); zoomOutBtn.draw(window);
+            resetViewBtn.setPosition(120, 660); resetViewBtn.draw(window);
 
-    // Draw info panel on right
-    sf::RectangleShape infoPanel(sf::Vector2f(220, 300));
-    infoPanel.setFillColor(sf::Color(245, 245, 250));
-    infoPanel.setOutlineColor(sf::Color(200, 200, 210));
-    infoPanel.setOutlineThickness(2.f);
-    infoPanel.setPosition(780, 10);
-    window.draw(infoPanel);
+            // Scrollbars (logic reuse)
+            if (maxScrollX > 0.0f) {
+                float thumbWidth = hScrollTrack.getSize().x * (hScrollTrack.getSize().x / totalTreeWidth);
+                if (thumbWidth < 30) thumbWidth = 30;
+                hScrollThumb.setSize(sf::Vector2f(thumbWidth, 12));
+                hScrollThumb.setPosition(hScrollTrack.getPosition().x + scrollX * (hScrollTrack.getSize().x - thumbWidth), hScrollTrack.getPosition().y);
+                window.draw(hScrollTrack); window.draw(hScrollThumb);
+            }
+            if (maxScrollY > 0.0f) {
+                float thumbHeight = vScrollTrack.getSize().y * (vScrollTrack.getSize().y / totalTreeHeight);
+                if (thumbHeight < 30) thumbHeight = 30;
+                vScrollThumb.setSize(sf::Vector2f(12, thumbHeight));
+                vScrollThumb.setPosition(vScrollTrack.getPosition().x, vScrollTrack.getPosition().y + scrollY * (vScrollTrack.getSize().y - thumbHeight));
+                window.draw(vScrollTrack); window.draw(vScrollThumb);
+            }
+        }
 
-    // Info text
-    sf::Text infoTitle("Compression Results", font, 18);
-    infoTitle.setFillColor(sf::Color::Black);
-    infoTitle.setPosition(810, 20);
-    window.draw(infoTitle);
-
-    string moduleStr = "Module: " + currentModule.name;
-    sf::Text moduleTxt(moduleStr, font, 14);
-    moduleTxt.setFillColor(sf::Color(80, 80, 80));
-    moduleTxt.setPosition(810, 60);
-    window.draw(moduleTxt);
-
-    string origStr = "Original size: " + to_string(origBytes) + " bytes";
-    sf::Text origTxt(origStr, font, 14);
-    origTxt.setFillColor(sf::Color::Black);
-    origTxt.setPosition(810, 90);
-    window.draw(origTxt);
-
-    string compStr = "Compressed size: " + to_string(compBytes) + " bytes";
-    sf::Text compTxt(compStr, font, 14);
-    compTxt.setFillColor(sf::Color::Black);
-    compTxt.setPosition(810, 115);
-    window.draw(compTxt);
-
-    string ratioStr = "Compression ratio: " + to_string(ratio * 100) + "%";
-    sf::Text ratioTxt(ratioStr, font, 14);
-    ratioTxt.setFillColor(sf::Color::Black);
-    ratioTxt.setPosition(810, 140);
-    window.draw(ratioTxt);
-
-    string savedStr = "Space saved: " + to_string((int)((1.0 - ratio) * 100)) + "%";
-    sf::Text savedTxt(savedStr, font, 14);
-    savedTxt.setFillColor(sf::Color(0, 120, 0));
-    savedTxt.setPosition(810, 165);
-    window.draw(savedTxt);
-
-    window.draw(saveCompressedBtn);
-    window.draw(saveCompressedTxt);
-    window.draw(saveStatusTxt);
-
-    // Draw scrollbars
-    if (maxScrollX > 0.0f) {
-        window.draw(hScrollTrack);
-        window.draw(hScrollThumb);
-    }
-    if (maxScrollY > 0.0f) {
-        window.draw(vScrollTrack);
-        window.draw(vScrollThumb);
+        window.display();
     }
 
-    // Draw zoom controls
-    window.draw(zoomInBtn);
-    window.draw(zoomInTxt);
-    window.draw(zoomOutBtn);
-    window.draw(zoomOutTxt);
-    window.draw(resetViewBtn);
-    window.draw(resetViewTxt);
-    window.draw(zoomDisplay);
-}
-else if (state == DECOMPRESS_RESULT) {
-    sf::RectangleShape bg(sf::Vector2f(700, 400));
-    bg.setFillColor(sf::Color(255, 255, 255));
-    bg.setOutlineColor(sf::Color(180, 180, 180));
-    bg.setOutlineThickness(2.f);
-    bg.setPosition(150, 150);
-    window.draw(bg);
+    if (savedRoot) { freeTree(savedRoot); }
+    if (decompressRoot) { freeTree(decompressRoot); }
 
-    sf::Text header("Decompression Complete", font, 24);
-    header.setFillColor(sf::Color::Black);
-    header.setPosition(300, 170);
-    window.draw(header);
-
-    sf::Text moduleTxt("Module: " + currentModule.name, font, 16);
-    moduleTxt.setFillColor(sf::Color(80, 80, 80));
-    moduleTxt.setPosition(200, 230);
-    window.draw(moduleTxt);
-
-    string inputStr = "Input file: " + decompressInputPath;
-    sf::Text inputTxt(inputStr, font, 14);
-    inputTxt.setFillColor(sf::Color::Black);
-    inputTxt.setPosition(200, 260);
-    window.draw(inputTxt);
-
-    string outputStr = "Output file: " + decompressOutputPath;
-    sf::Text outputTxt(outputStr, font, 14);
-    outputTxt.setFillColor(sf::Color::Black);
-    outputTxt.setPosition(200, 285);
-    window.draw(outputTxt);
-
-    string sizeStr = "Decompressed size: " + to_string(decompressedBytes) + " bytes";
-    sf::Text sizeTxt(sizeStr, font, 14);
-    sizeTxt.setFillColor(sf::Color::Black);
-    sizeTxt.setPosition(200, 310);
-    window.draw(sizeTxt);
-
-    window.draw(saveDecompressedBtn);
-    window.draw(saveDecompressedTxt);
-    window.draw(backToMenuBtn);
-    window.draw(backToMenuTxt);
-    window.draw(showTreeBtn);
-    window.draw(showTreeTxt);
-    window.draw(decompressSaveStatus);
-}
-else if (state == SHOW_DECOMPRESS_TREE) {
-    // Similar to SHOW_RESULT but for decompression tree
-    sf::RectangleShape treeArea(sf::Vector2f(760, 640));
-    treeArea.setFillColor(sf::Color(255, 255, 255));
-    treeArea.setOutlineColor(sf::Color(180, 180, 180));
-    treeArea.setOutlineThickness(2.f);
-    treeArea.setPosition(10, 10);
-    window.draw(treeArea);
-
-    drawTreeSFML(window, decompressViz, decompressVizCount, nodeRadius, font, zoomLevel,
-        scrollX, scrollY, maxScrollX, maxScrollY, currentModule);
-
-    // Draw info panel
-    sf::RectangleShape infoPanel(sf::Vector2f(220, 200));
-    infoPanel.setFillColor(sf::Color(245, 245, 250));
-    infoPanel.setOutlineColor(sf::Color(200, 200, 210));
-    infoPanel.setOutlineThickness(2.f);
-    infoPanel.setPosition(780, 10);
-    window.draw(infoPanel);
-
-    sf::Text infoTitle("Decompression Tree", font, 18);
-    infoTitle.setFillColor(sf::Color::Black);
-    infoTitle.setPosition(810, 20);
-    window.draw(infoTitle);
-
-    string moduleStr = "Module: " + currentModule.name;
-    sf::Text moduleTxt(moduleStr, font, 14);
-    moduleTxt.setFillColor(sf::Color(80, 80, 80));
-    moduleTxt.setPosition(810, 60);
-    window.draw(moduleTxt);
-
-    string fileStr = "File: " + decompressInputPath;
-    sf::Text fileTxt(fileStr, font, 12);
-    fileTxt.setFillColor(sf::Color::Black);
-    fileTxt.setPosition(810, 90);
-    window.draw(fileTxt);
-
-    // Draw scrollbars
-    if (maxScrollX > 0.0f) {
-        window.draw(hScrollTrack);
-        window.draw(hScrollThumb);
-    }
-    if (maxScrollY > 0.0f) {
-        window.draw(vScrollTrack);
-        window.draw(vScrollThumb);
-    }
-
-    // Draw zoom controls
-    window.draw(zoomInBtn);
-    window.draw(zoomInTxt);
-    window.draw(zoomOutBtn);
-    window.draw(zoomOutTxt);
-    window.draw(resetViewBtn);
-    window.draw(resetViewTxt);
-    window.draw(zoomDisplay);
-
-    // Back button
-    window.draw(backToMenuBtn);
-    window.draw(backToMenuTxt);
-}
-
-// Display everything
-window.display();
-} // End of main loop
-
-// Cleanup
-if (savedRoot) {
-    freeTree(savedRoot);
-    savedRoot = nullptr;
-}
-if (decompressRoot) {
-    freeTree(decompressRoot);
-    decompressRoot = nullptr;
-}
-
-return 0;
+    return 0;
 }
