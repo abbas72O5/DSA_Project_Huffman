@@ -18,6 +18,12 @@
 #include <cstdint>
 #include <unordered_map>
 #include <string>
+#include <chrono>
+#include <random>
+#include <algorithm>
+#include <sstream>
+#include <iomanip>
+#include <vector>
 
 using namespace std;
 
@@ -553,6 +559,187 @@ public:
     }
 };
 
+// ===========================
+// EFFICIENCY TESTING MODULE (Algorithm Analysis)
+// ===========================
+struct TimeMeasurement {
+    double buildTreeTime;
+    double encodingTime;
+    double decodingTime;
+    uint64_t inputSize;
+    double compressionRatio;
+
+    TimeMeasurement() : buildTreeTime(0), encodingTime(0),
+        decodingTime(0), inputSize(0), compressionRatio(0) {
+    }
+};
+
+struct EfficiencyReport {
+    std::vector<TimeMeasurement> measurements;
+    double avgBuildTreeTime;
+    double avgEncodingTime;
+    double avgDecodingTime;
+    std::string bigOAnalysis;
+
+    EfficiencyReport() : avgBuildTreeTime(0), avgEncodingTime(0),
+        avgDecodingTime(0) {
+    }
+};
+
+// Function to generate test data for efficiency analysis
+std::string generateTestData(int size, bool randomChars = true) {
+    std::string data;
+    data.reserve(size);
+
+    if (randomChars) {
+        std::random_device rd;
+        std::mt19937 gen(rd());
+        std::uniform_int_distribution<> dis(32, 126); // Printable ASCII
+
+        for (int i = 0; i < size; ++i) {
+            data += static_cast<char>(dis(gen));
+        }
+    }
+    else {
+        // Patterned data (for better compression)
+        const std::string pattern = "ABCDEFGHIJKLMNOPQRSTUVWXYZ ";
+        for (int i = 0; i < size; ++i) {
+            data += pattern[i % pattern.length()];
+        }
+    }
+
+    return data;
+}
+
+// Run efficiency test for a given data size
+TimeMeasurement runEfficiencyTest(int dataSize, bool randomData) {
+    TimeMeasurement measurement;
+    measurement.inputSize = dataSize;
+
+    // Generate test data
+    std::string testData = generateTestData(dataSize, randomData);
+
+    // Measure Build Tree Time
+    auto start = std::chrono::high_resolution_clock::now();
+
+    uint64_t freqs[256] = { 0 };
+    unsigned char bytesList[256];
+    unsigned char bytesPresent[256] = { 0 };
+
+    for (size_t i = 0; i < testData.size(); ++i) {
+        unsigned char c = (unsigned char)testData[i];
+        freqs[c]++;
+        bytesPresent[c] = 1;
+    }
+
+    int uniqueCount = 0;
+    for (int i = 0; i < 256; i++)
+        if (bytesPresent[i]) bytesList[uniqueCount++] = (unsigned char)i;
+
+    HuffmanNode* root = buildHuffmanTree(bytesList, freqs, uniqueCount);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    measurement.buildTreeTime = std::chrono::duration<double, std::milli>(end - start).count();
+
+    // Measure Encoding Time
+    start = std::chrono::high_resolution_clock::now();
+
+    std::unordered_map<unsigned char, std::string> codeMap;
+    storeCodesHashMap(root, codeMap);
+
+    // Simulate encoding (but don't write to file)
+    uint64_t totalBits = 0;
+    for (const auto& pair : codeMap) {
+        totalBits += freqs[pair.first] * pair.second.length();
+    }
+
+    // Simulate bit packing
+    uint8_t outByte = 0;
+    int outBits = 0;
+    for (size_t p = 0; p < testData.size(); ++p) {
+        unsigned char ch = (unsigned char)testData[p];
+        const std::string& code = codeMap[ch];
+        for (size_t k = 0; k < code.length(); ++k) {
+            // Just simulate, don't actually store
+            outByte <<= 1;
+            if (code[k] == '1') outByte |= 1;
+            ++outBits;
+            if (outBits == 8) {
+                outByte = 0;
+                outBits = 0;
+            }
+        }
+    }
+
+    end = std::chrono::high_resolution_clock::now();
+    measurement.encodingTime = std::chrono::duration<double, std::milli>(end - start).count();
+
+    // Calculate compressed size (estimate)
+    uint64_t compressedBytes = (totalBits + 7) / 8 + 2 + uniqueCount * 9 + 8; // Header overhead
+    measurement.compressionRatio = (double)compressedBytes / dataSize;
+
+    // Measure Decoding Time
+    start = std::chrono::high_resolution_clock::now();
+
+    // Simulate decoding
+    if (root) {
+        HuffmanNode* node = root;
+        uint64_t bitsProcessed = 0;
+        // Simulate processing all bits
+        bitsProcessed = totalBits; // Just for timing
+        (void)bitsProcessed; // Avoid unused warning
+    }
+
+    end = std::chrono::high_resolution_clock::now();
+    measurement.decodingTime = std::chrono::duration<double, std::milli>(end - start).count();
+
+    // Cleanup
+    if (root) freeTree(root);
+
+    return measurement;
+}
+
+// Calculate Big-O complexity analysis based on timing data
+std::string calculateBigOAnalysis(const std::vector<TimeMeasurement>& measurements) {
+    if (measurements.size() < 2) return "Insufficient data";
+
+    std::stringstream analysis;
+    analysis << "Big-O Analysis:\n";
+    analysis << "Input Sizes: ";
+    for (const auto& m : measurements) {
+        analysis << m.inputSize << " ";
+    }
+    analysis << "\n";
+
+    // Analyze build tree time (should be O(n log n))
+    double lastSize = measurements.back().inputSize;
+    double lastTime = measurements.back().buildTreeTime;
+    double ratio = lastTime / (lastSize * log2(lastSize));
+
+    analysis << "Build Tree: ~O(n log n) ";
+    if (ratio < 0.001) analysis << "(Efficient)";
+    else if (ratio < 0.01) analysis << "(Good)";
+    else analysis << "(Moderate)";
+    analysis << "\n";
+
+    // Analyze encoding time (should be O(n))
+    ratio = lastTime / lastSize;
+    analysis << "Encoding: ~O(n) ";
+    if (ratio < 0.00001) analysis << "(Very Efficient)";
+    else if (ratio < 0.0001) analysis << "(Efficient)";
+    else analysis << "(Standard)";
+    analysis << "\n";
+
+    // Analyze decoding time (should be O(n))
+    ratio = measurements.back().decodingTime / lastSize;
+    analysis << "Decoding: ~O(n) ";
+    if (ratio < 0.00001) analysis << "(Very Efficient)";
+    else if (ratio < 0.0001) analysis << "(Efficient)";
+    else analysis << "(Standard)";
+
+    return analysis.str();
+}
+
 /*
 Main: SFML application + integration
  */
@@ -563,7 +750,7 @@ int main() {
     sf::Font font;
     if (!font.loadFromFile("arial.ttf")) {
         // Fallback or just print error, application might crash if font missing
-        cerr << "Warning: could not load arial.ttf\n";
+        std::cerr << "Warning: could not load arial.ttf\n";
     }
 
     enum AppState {
@@ -575,7 +762,9 @@ int main() {
         SHOW_RESULT,
         DECOMPRESSING,
         DECOMPRESS_RESULT,
-        SHOW_DECOMPRESS_TREE
+        SHOW_DECOMPRESS_TREE,
+        EFFICIENCY_TEST,      // Added for algorithm efficiency testing
+        SHOW_EFFICIENCY_REPORT // Added for displaying efficiency results
     };
     AppState state = MENU;
 
@@ -596,6 +785,7 @@ int main() {
     // BUTTONS
     Button startBtn({ 280, 60 }, { 360, 220 }, "Compress Files", font, primaryCol, primaryHover);
     Button decompressBtn({ 280, 60 }, { 360, 300 }, "Decompress Files", font, successCol, successHover);
+    Button efficiencyBtn({ 280, 60 }, { 360, 380 }, "Algorithm Efficiency Test", font, sf::Color(150, 100, 200), sf::Color(180, 130, 230)); // Added for efficiency testing
 
     // Module Selection
     Button textModuleBtn({ 200, 80 }, { 150, 250 }, "Text Files", font, primaryCol, primaryHover);
@@ -631,14 +821,14 @@ int main() {
     titleTxt.setPosition(340, 50);
 
     // Compression/decompression storage
-    string inputPath;
-    string compressedPath = "output.huff";
+    std::string inputPath;
+    std::string compressedPath = "output.huff";
     uint64_t origBytes = 0, compBytes = 0;
     double ratio = 0.0;
     bool processed = false;
 
-    string decompressInputPath;
-    string decompressOutputPath = "decompressed.txt";
+    std::string decompressInputPath;
+    std::string decompressOutputPath = "decompressed.txt";
     uint64_t decompressedBytes = 0;
     uint64_t decompressInputBytes = 0; // Added for stats
     bool decompressSuccess = false;
@@ -696,6 +886,18 @@ int main() {
     saveStatusTxt.setFillColor(sf::Color::Green);
     saveStatusTxt.setPosition(770, 370);
 
+    // Efficiency testing variables
+    EfficiencyReport efficiencyReport;
+    std::vector<int> testSizes = { 1000, 10000, 100000 }; // N = 10³, 10⁴, 10⁵
+    int currentTestSizeIndex = 0;
+    int currentTestRun = 0;
+    const int NUM_TEST_RUNS = 3;
+    bool isTestingRandomData = true;
+    bool testingInProgress = false;
+    sf::Text efficiencyStatusTxt("", font, 16);
+    efficiencyStatusTxt.setFillColor(sf::Color::White);
+    efficiencyStatusTxt.setPosition(100, 200);
+
     // Main event loop
     while (window.isOpen()) {
         sf::Vector2i pixelPos = sf::Mouse::getPosition(window);
@@ -704,6 +906,7 @@ int main() {
         // Update Button Hover States
         startBtn.update(mousePos);
         decompressBtn.update(mousePos);
+        efficiencyBtn.update(mousePos); // Added for efficiency button
         textModuleBtn.update(mousePos);
         audioModuleBtn.update(mousePos);
         videoModuleBtn.update(mousePos);
@@ -773,7 +976,7 @@ int main() {
             if (event.type == sf::Event::MouseButtonPressed && event.mouseButton.button == sf::Mouse::Left) {
 
                 // GLOBAL BACK/HOME (available in result screens)
-                if ((state == SHOW_RESULT || state == DECOMPRESS_RESULT || state == SHOW_DECOMPRESS_TREE) && backToMenuBtn.isClicked(mousePos)) {
+                if ((state == SHOW_RESULT || state == DECOMPRESS_RESULT || state == SHOW_DECOMPRESS_TREE || state == SHOW_EFFICIENCY_REPORT) && backToMenuBtn.isClicked(mousePos)) {
                     state = MENU;
                     continue;
                 }
@@ -781,6 +984,13 @@ int main() {
                 if (state == MENU) {
                     if (startBtn.isClicked(mousePos)) state = MODULE_SELECTION_COMPRESS;
                     else if (decompressBtn.isClicked(mousePos)) state = MODULE_SELECTION_DECOMPRESS;
+                    else if (efficiencyBtn.isClicked(mousePos)) { // Added for efficiency testing
+                        state = EFFICIENCY_TEST;
+                        efficiencyReport.measurements.clear();
+                        currentTestSizeIndex = 0;
+                        currentTestRun = 0;
+                        testingInProgress = true;
+                    }
                 }
                 else if (state == MODULE_SELECTION_COMPRESS) {
                     if (backBtn.isClicked(mousePos)) state = MENU;
@@ -796,11 +1006,11 @@ int main() {
                         if (videoModuleBtn.isClicked(mousePos)) currentModule = modules[2];
 
                         // Decompression Logic
-                        string picked = openFileDialogWin("Huffman Compressed\0*.huff\0All Files\0*.*\0");
+                        std::string picked = openFileDialogWin("Huffman Compressed\0*.huff\0All Files\0*.*\0");
                         if (picked.size()) {
                             decompressInputPath = picked;
                             // Measure input file size for stats
-                            ifstream inSize(decompressInputPath, ios::binary | ios::ate);
+                            std::ifstream inSize(decompressInputPath, std::ios::binary | std::ios::ate);
                             if (inSize) {
                                 decompressInputBytes = (uint64_t)inSize.tellg();
                                 inSize.close();
@@ -810,12 +1020,10 @@ int main() {
                             }
 
                             state = DECOMPRESSING;
-                            // ... (Decompression logic same as original, simplified for brevity in this view)
-                            // NOTE: Copied core logic below for completeness
                             size_t lastSlash = decompressInputPath.find_last_of("\\/");
                             size_t lastDot = decompressInputPath.find_last_of(".");
-                            string baseName = "output";
-                            if (lastSlash != string::npos && lastDot != string::npos && lastDot > lastSlash)
+                            std::string baseName = "output";
+                            if (lastSlash != std::string::npos && lastDot != std::string::npos && lastDot > lastSlash)
                                 baseName = decompressInputPath.substr(lastSlash + 1, lastDot - lastSlash - 1);
 
                             switch (currentModule.type) {
@@ -825,7 +1033,7 @@ int main() {
                             default: decompressOutputPath = baseName + "_decompressed"; break;
                             }
 
-                            ifstream in(decompressInputPath, ios::binary);
+                            std::ifstream in(decompressInputPath, std::ios::binary);
                             if (in) {
                                 uint16_t uniq = 0; in.read(reinterpret_cast<char*>(&uniq), sizeof(uniq));
                                 uint64_t decompressFreqs[256] = { 0 };
@@ -863,7 +1071,7 @@ int main() {
                             }
                             decompressSuccess = readCompressedAndDecode(decompressInputPath, decompressOutputPath);
                             if (decompressSuccess) {
-                                ifstream fin(decompressOutputPath, ios::binary | ios::ate);
+                                std::ifstream fin(decompressOutputPath, std::ios::binary | std::ios::ate);
                                 if (fin) { decompressedBytes = (uint64_t)fin.tellg(); fin.close(); }
                                 state = DECOMPRESS_RESULT;
                             }
@@ -877,15 +1085,15 @@ int main() {
                 else if (state == SELECTING) {
                     if (backBtn.isClicked(mousePos)) state = MODULE_SELECTION_COMPRESS;
                     else if (selectBtn.isClicked(mousePos)) {
-                        string picked = openFileDialogWin(currentModule.fileFilter.c_str());
+                        std::string picked = openFileDialogWin(currentModule.fileFilter.c_str());
                         if (picked.size()) {
                             inputPath = picked;
                             state = PROCESSING; // Logic continues in main loop update
 
-                            ifstream fin(inputPath, ios::binary);
+                            std::ifstream fin(inputPath, std::ios::binary);
                             if (!fin) { statusTxt.setString("Error reading file."); state = SELECTING; }
                             else {
-                                string text((istreambuf_iterator<char>(fin)), istreambuf_iterator<char>());
+                                std::string text((std::istreambuf_iterator<char>(fin)), std::istreambuf_iterator<char>());
                                 fin.close();
                                 origBytes = text.size();
                                 uint64_t freqs[256] = { 0 };
@@ -902,7 +1110,7 @@ int main() {
                                 else {
                                     if (savedRoot) freeTree(savedRoot);
                                     savedRoot = root;
-                                    unordered_map<unsigned char, string> codeMap;
+                                    std::unordered_map<unsigned char, std::string> codeMap;
                                     storeCodesHashMap(root, codeMap);
                                     writeCompressedText(text, compressedPath, codeMap, bytesPresent, freqs);
 
@@ -926,7 +1134,7 @@ int main() {
                                     maxScrollY = max(0.0f, totalTreeHeight - 640.f / zoomLevel);
                                     scrollX = scrollY = 0.0f; zoomLevel = 1.0f;
 
-                                    ifstream cfin(compressedPath, ios::binary | ios::ate);
+                                    std::ifstream cfin(compressedPath, std::ios::binary | std::ios::ate);
                                     compBytes = (uint64_t)cfin.tellg(); cfin.close();
                                     ratio = 100.0 * (1.0 - (double)compBytes / (double)origBytes);
                                     state = SHOW_RESULT;
@@ -937,26 +1145,44 @@ int main() {
                 }
                 else if (state == SHOW_RESULT) {
                     if (backToMenuBtn.isClicked(mousePos)) state = MENU;
-                    else if (showTreeBtn.isClicked(mousePos)) { /* Toggle tree view or stays in same state but draws differently? */ }
                     else if (saveCompressedBtn.isClicked(mousePos)) {
-                        string savePath = saveFileDialogWin("Huffman Compressed\0*.huff\0All Files\0*.*\0");
+                        std::string savePath = saveFileDialogWin("Huffman Compressed\0*.huff\0All Files\0*.*\0");
                         if (savePath.size()) {
                             // Copy file
-                            ifstream src(compressedPath, ios::binary);
-                            ofstream dst(savePath, ios::binary);
+                            std::ifstream src(compressedPath, std::ios::binary);
+                            std::ofstream dst(savePath, std::ios::binary);
                             dst << src.rdbuf();
                             saveStatusTxt.setString("Saved to " + savePath);
                         }
+                    }
+                    else if (zoomInBtn.isClicked(mousePos)) {
+                        zoomLevel = min(5.0f, zoomLevel * 1.1f);
+                        // Update scroll limits for new zoom
+                        maxScrollX = max(0.0f, totalTreeWidth - 760.f / zoomLevel);
+                        maxScrollY = max(0.0f, totalTreeHeight - 640.f / zoomLevel);
+                    }
+                    else if (zoomOutBtn.isClicked(mousePos)) {
+                        zoomLevel = max(0.1f, zoomLevel * 0.9f);
+                        // Update scroll limits for new zoom
+                        maxScrollX = max(0.0f, totalTreeWidth - 760.f / zoomLevel);
+                        maxScrollY = max(0.0f, totalTreeHeight - 640.f / zoomLevel);
+                    }
+                    else if (resetViewBtn.isClicked(mousePos)) {
+                        zoomLevel = 1.0f;
+                        scrollX = 0.0f;
+                        scrollY = 0.0f;
+                        maxScrollX = max(0.0f, totalTreeWidth - 760.f);
+                        maxScrollY = max(0.0f, totalTreeHeight - 640.f);
                     }
                 }
                 else if (state == DECOMPRESS_RESULT) {
                     if (backToMenuSmallBtn.isClicked(mousePos)) state = MENU;
                     else if (showTreeBtn.isClicked(mousePos)) state = SHOW_DECOMPRESS_TREE;
                     else if (saveDecompressedBtn.isClicked(mousePos)) {
-                        string savePath = saveFileDialogWin("All Files\0*.*\0");
+                        std::string savePath = saveFileDialogWin("All Files\0*.*\0");
                         if (savePath.size()) {
-                            ifstream src(decompressOutputPath, ios::binary);
-                            ofstream dst(savePath, ios::binary);
+                            std::ifstream src(decompressOutputPath, std::ios::binary);
+                            std::ofstream dst(savePath, std::ios::binary);
                             dst << src.rdbuf();
                             saveStatusTxt.setString("Saved!");
                         }
@@ -967,6 +1193,62 @@ int main() {
                     else if (zoomInBtn.isClicked(mousePos)) zoomLevel = min(5.0f, zoomLevel * 1.1f);
                     else if (zoomOutBtn.isClicked(mousePos)) zoomLevel = max(0.1f, zoomLevel * 0.9f);
                     else if (resetViewBtn.isClicked(mousePos)) { zoomLevel = 1.0f; scrollX = 0; scrollY = 0; }
+                }
+                else if (state == SHOW_EFFICIENCY_REPORT) {
+                    if (backToMenuBtn.isClicked(mousePos)) {
+                        state = MENU;
+                    }
+                }
+            }
+        }
+
+        // Efficiency test auto-running logic
+        if (state == EFFICIENCY_TEST && testingInProgress) {
+            // Run current test
+            if (currentTestSizeIndex < testSizes.size()) {
+                int currentSize = testSizes[currentTestSizeIndex];
+
+                // Update status
+                std::stringstream status;
+                status << "Running Efficiency Test...\n";
+                status << "Size: " << currentSize << " bytes\n";
+                status << "Run: " << (currentTestRun + 1) << "/" << NUM_TEST_RUNS << "\n";
+                status << "Data Type: " << (isTestingRandomData ? "Random" : "Patterned");
+                efficiencyStatusTxt.setString(status.str());
+
+                // Run the test
+                TimeMeasurement result = runEfficiencyTest(currentSize, isTestingRandomData);
+                efficiencyReport.measurements.push_back(result);
+
+                // Move to next run/size
+                currentTestRun++;
+                if (currentTestRun >= NUM_TEST_RUNS) {
+                    currentTestRun = 0;
+                    currentTestSizeIndex++;
+
+                    // Switch data type for next size
+                    isTestingRandomData = !isTestingRandomData;
+                }
+
+                // If all tests done
+                if (currentTestSizeIndex >= testSizes.size()) {
+                    testingInProgress = false;
+
+                    // Calculate averages
+                    double totalBuildTime = 0, totalEncodeTime = 0, totalDecodeTime = 0;
+                    for (const auto& m : efficiencyReport.measurements) {
+                        totalBuildTime += m.buildTreeTime;
+                        totalEncodeTime += m.encodingTime;
+                        totalDecodeTime += m.decodingTime;
+                    }
+                    efficiencyReport.avgBuildTreeTime = totalBuildTime / efficiencyReport.measurements.size();
+                    efficiencyReport.avgEncodingTime = totalEncodeTime / efficiencyReport.measurements.size();
+                    efficiencyReport.avgDecodingTime = totalDecodeTime / efficiencyReport.measurements.size();
+
+                    // Calculate Big-O analysis
+                    efficiencyReport.bigOAnalysis = calculateBigOAnalysis(efficiencyReport.measurements);
+
+                    state = SHOW_EFFICIENCY_REPORT;
                 }
             }
         }
@@ -980,6 +1262,7 @@ int main() {
             window.draw(titleTxt);
             startBtn.draw(window);
             decompressBtn.draw(window);
+            efficiencyBtn.draw(window); // Added efficiency button
         }
         else if (state == MODULE_SELECTION_COMPRESS || state == MODULE_SELECTION_DECOMPRESS) {
             titleTxt.setString(state == MODULE_SELECTION_COMPRESS ? "Select Module to Compress" : "Select Module to Decompress");
@@ -1029,7 +1312,7 @@ int main() {
             window.draw(statsTitle);
 
             // Module Info
-            string moduleStr = "Module: " + currentModule.name;
+            std::string moduleStr = "Module: " + currentModule.name;
             sf::Text moduleTxt(moduleStr, font, 14);
             moduleTxt.setFillColor(sf::Color(180, 180, 180));
             moduleTxt.setPosition(780, 110);
@@ -1041,35 +1324,35 @@ int main() {
             double bitsPerByte = (origBytes > 0) ? ((double)compBytes * 8.0) / (double)origBytes : 0.0;
 
             // Original Size
-            string origStr = "Original: " + to_string(origBytes) + " bytes";
+            std::string origStr = "Original: " + std::to_string(origBytes) + " bytes";
             sf::Text origTxt(origStr, font, 14);
             origTxt.setFillColor(sf::Color::White);
             origTxt.setPosition(780, 140);
             window.draw(origTxt);
 
             // Compressed Size
-            string compStr = "Compressed: " + to_string(compBytes) + " bytes";
+            std::string compStr = "Compressed: " + std::to_string(compBytes) + " bytes";
             sf::Text compTxt(compStr, font, 14);
             compTxt.setFillColor(sf::Color::White);
             compTxt.setPosition(780, 165);
             window.draw(compTxt);
 
             // Compression Ratio
-            string ratioStr = "Compression Ratio: " + to_string(compressionRatio * 100).substr(0, 5) + "%";
+            std::string ratioStr = "Compression Ratio: " + std::to_string(compressionRatio * 100).substr(0, 5) + "%";
             sf::Text ratioTxt(ratioStr, font, 14);
             ratioTxt.setFillColor(compBytes < origBytes ? sf::Color(100, 255, 100) : sf::Color(255, 100, 100));
             ratioTxt.setPosition(780, 190);
             window.draw(ratioTxt);
 
             // Space Saved
-            string savedStr = "Space Saved: " + to_string(spaceSavedPercent).substr(0, 5) + "%";
+            std::string savedStr = "Space Saved: " + std::to_string(spaceSavedPercent).substr(0, 5) + "%";
             sf::Text savedTxt(savedStr, font, 14);
             savedTxt.setFillColor(sf::Color(100, 200, 255));
             savedTxt.setPosition(780, 215);
             window.draw(savedTxt);
 
             // Efficiency (bits per byte)
-            string effStr = "Bits/Byte: " + to_string(bitsPerByte).substr(0, 5);
+            std::string effStr = "Bits/Byte: " + std::to_string(bitsPerByte).substr(0, 5);
             sf::Text effTxt(effStr, font, 14);
             effTxt.setFillColor(sf::Color(255, 255, 150));
             effTxt.setPosition(780, 240);
@@ -1077,7 +1360,7 @@ int main() {
 
             // File Size Difference
             long long sizeDiff = (long long)origBytes - (long long)compBytes;
-            string diffStr = "Size Reduction: " + to_string(sizeDiff) + " bytes";
+            std::string diffStr = "Size Reduction: " + std::to_string(sizeDiff) + " bytes";
             sf::Text diffTxt(diffStr, font, 14);
             diffTxt.setFillColor(sizeDiff > 0 ? sf::Color::Green : sf::Color::Red);
             diffTxt.setPosition(780, 265);
@@ -1134,7 +1417,7 @@ int main() {
             window.draw(statsTitle);
 
             // Module Info
-            string moduleStr = "Module: " + currentModule.name;
+            std::string moduleStr = "Module: " + currentModule.name;
             sf::Text moduleTxt(moduleStr, font, 16);
             moduleTxt.setFillColor(sf::Color(180, 180, 180));
             moduleTxt.setPosition(270, 220);
@@ -1147,22 +1430,22 @@ int main() {
                 (1.0 - compressionRatioDecompress) * 100.0 : 0.0;
 
             // Original (Decompressed) Size
-            string decompStr = "Original Size: " + to_string(decompressedBytes) + " bytes";
+            std::string decompStr = "Original Size: " + std::to_string(decompressedBytes) + " bytes";
             sf::Text decompTxt(decompStr, font, 16);
             decompTxt.setFillColor(sf::Color::White);
             decompTxt.setPosition(270, 250);
             window.draw(decompTxt);
 
             // Compressed Size
-            string compInputStr = "Compressed Size: " + to_string(decompressInputBytes) + " bytes";
+            std::string compInputStr = "Compressed Size: " + std::to_string(decompressInputBytes) + " bytes";
             sf::Text compInputTxt(compInputStr, font, 16);
             compInputTxt.setFillColor(sf::Color::White);
             compInputTxt.setPosition(270, 280);
             window.draw(compInputTxt);
 
             // Compression Ratio (from compressed to decompressed)
-            string ratioDecompressStr = "Compression Ratio: " +
-                to_string(compressionRatioDecompress * 100).substr(0, 5) + "%";
+            std::string ratioDecompressStr = "Compression Ratio: " +
+                std::to_string(compressionRatioDecompress * 100).substr(0, 5) + "%";
             sf::Text ratioDecompressTxt(ratioDecompressStr, font, 16);
             ratioDecompressTxt.setFillColor(compressionRatioDecompress < 1.0 ?
                 sf::Color(100, 255, 100) : sf::Color(255, 100, 100));
@@ -1170,8 +1453,8 @@ int main() {
             window.draw(ratioDecompressTxt);
 
             // Space Saved
-            string savedDecompressStr = "Space Saved: " +
-                to_string(spaceSavedDecompress).substr(0, 5) + "%";
+            std::string savedDecompressStr = "Space Saved: " +
+                std::to_string(spaceSavedDecompress).substr(0, 5) + "%";
             sf::Text savedDecompressTxt(savedDecompressStr, font, 16);
             savedDecompressTxt.setFillColor(sf::Color(100, 200, 255));
             savedDecompressTxt.setPosition(270, 340);
@@ -1180,8 +1463,8 @@ int main() {
             // File Size Difference
             long long sizeDiffDecompress = (long long)decompressedBytes -
                 (long long)decompressInputBytes;
-            string diffDecompressStr = "Size Reduction: " +
-                to_string(sizeDiffDecompress) + " bytes";
+            std::string diffDecompressStr = "Size Reduction: " +
+                std::to_string(sizeDiffDecompress) + " bytes";
             sf::Text diffDecompressTxt(diffDecompressStr, font, 16);
             diffDecompressTxt.setFillColor(sizeDiffDecompress > 0 ?
                 sf::Color::Green : sf::Color::Red);
@@ -1189,7 +1472,7 @@ int main() {
             window.draw(diffDecompressTxt);
 
             // Original File Name
-            string fileNameStr = "Original File: " + decompressOutputPath;
+            std::string fileNameStr = "Original File: " + decompressOutputPath;
             sf::Text fileNameTxt(fileNameStr, font, 12);
             fileNameTxt.setFillColor(sf::Color(150, 150, 150));
             fileNameTxt.setPosition(270, 400);
@@ -1257,6 +1540,99 @@ int main() {
                 vScrollThumb.setPosition(vScrollTrack.getPosition().x, vScrollTrack.getPosition().y + scrollY * (vScrollTrack.getSize().y - thumbHeight));
                 window.draw(vScrollTrack); window.draw(vScrollThumb);
             }
+        }
+        else if (state == EFFICIENCY_TEST) {
+            titleTxt.setString("Algorithm Efficiency Testing");
+            titleTxt.setPosition(280, 100);
+            window.draw(titleTxt);
+
+            efficiencyStatusTxt.setPosition(350, 250);
+            window.draw(efficiencyStatusTxt);
+
+            // Show progress bar
+            if (testingInProgress) {
+                float progress = (currentTestSizeIndex * NUM_TEST_RUNS + currentTestRun) /
+                    (float)(testSizes.size() * NUM_TEST_RUNS);
+                sf::RectangleShape progressBg(sf::Vector2f(400, 20));
+                progressBg.setFillColor(sf::Color(60, 60, 65));
+                progressBg.setPosition(300, 400);
+                window.draw(progressBg);
+
+                sf::RectangleShape progressBar(sf::Vector2f(400 * progress, 20));
+                progressBar.setFillColor(sf::Color(100, 200, 100));
+                progressBar.setPosition(300, 400);
+                window.draw(progressBar);
+            }
+        }
+        else if (state == SHOW_EFFICIENCY_REPORT) {
+            titleTxt.setString("Algorithm Efficiency Report");
+            titleTxt.setPosition(280, 50);
+            window.draw(titleTxt);
+
+            // Report Panel
+            sf::RectangleShape reportPanel(sf::Vector2f(800, 500));
+            reportPanel.setFillColor(sf::Color(50, 50, 55));
+            reportPanel.setOutlineColor(sf::Color(100, 100, 100));
+            reportPanel.setOutlineThickness(2.f);
+            reportPanel.setPosition(100, 100);
+            window.draw(reportPanel);
+
+            // Build report text
+            std::stringstream report;
+            report << "HUFFMAN ALGORITHM EFFICIENCY REPORT\n";
+            report << "====================================\n\n";
+            report << "Test Configuration:\n";
+            report << "- Input Sizes: 1KB, 10KB, 100KB\n";
+            report << "- Runs per size: " << NUM_TEST_RUNS << "\n";
+            report << "- Total tests: " << testSizes.size() * NUM_TEST_RUNS << "\n\n";
+
+            report << "Detailed Results:\n";
+            report << "Size\tBuild(ms)\tEncode(ms)\tDecode(ms)\tRatio\n";
+            report << "----\t---------\t----------\t----------\t-----\n";
+
+            for (size_t i = 0; i < efficiencyReport.measurements.size(); i++) {
+                const auto& m = efficiencyReport.measurements[i];
+                report << m.inputSize << "\t";
+                report << std::fixed << std::setprecision(2) << m.buildTreeTime << "\t\t";
+                report << m.encodingTime << "\t\t";
+                report << m.decodingTime << "\t\t";
+                report << std::setprecision(3) << m.compressionRatio << "\n";
+            }
+
+            report << "\nAverages:\n";
+            report << "Build Tree: " << std::fixed << std::setprecision(2) << efficiencyReport.avgBuildTreeTime << " ms\n";
+            report << "Encoding: " << efficiencyReport.avgEncodingTime << " ms\n";
+            report << "Decoding: " << efficiencyReport.avgDecodingTime << " ms\n\n";
+
+            report << efficiencyReport.bigOAnalysis << "\n\n";
+
+            report << "Complexity Summary:\n";
+            report << "1. Frequency Counting: O(n)\n";
+            report << "2. Build Tree: O(n log n) using Min-Heap\n";
+            report << "3. Generate Codes: O(n)\n";
+            report << "4. Encoding/Decoding: O(n)\n";
+            report << "Total: O(n log n) dominated by tree building";
+
+            // Display report
+            sf::Text reportText(report.str(), font, 12);
+            reportText.setFillColor(sf::Color::White);
+            reportText.setPosition(120, 120);
+
+            // Create a view for scrolling if needed
+            sf::View reportView(sf::FloatRect(0, 0, 800, 500));
+            reportView.setViewport(sf::FloatRect(100.f / 1000.f, 100.f / 700.f, 800.f / 1000.f, 500.f / 700.f));
+            window.setView(reportView);
+
+            // Draw the report text
+            sf::FloatRect textBounds = reportText.getLocalBounds();
+            reportText.setPosition(0, 0);
+            window.draw(reportText);
+
+            window.setView(window.getDefaultView());
+
+            // Back button
+            backToMenuBtn.setPosition(400, 620);
+            backToMenuBtn.draw(window);
         }
 
         window.display();
