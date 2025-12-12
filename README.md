@@ -2,11 +2,12 @@ Huffman Multi-Module Compressor 🗜️
 
 A Huffman-coding–based compression tool with GUI visualization, built as a Data Structures and Algorithms (DSA) project.
 
+## 👥 Group Members
 
-👥 Group Members
-Name                |   Roll Number      |    Contribution
-Syed Abbas Raza     |    517626          |    Core Huffman Algorithm, Tree Visualization , Basic GUI Setup
-Shuja Naveed        |    502379          |    GUI Development, File I/O, Multi-Module System, Integration of Modules
+| Name            | Roll Number | Contribution                                           |
+|-----------------|-------------|--------------------------------------------------------|
+| Syed Abbas Raza | 517626      | Core Huffman Algorithm, Tree Visualization, Basic GUI Setup |
+| Shuja Naveed    | 502379      | GUI Development, File I/O, Multi-Module System, Integration of Modules |
 
 
 Course: Data Structures and Algorithms
