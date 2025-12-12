@@ -22,7 +22,7 @@
 using namespace std;
 
 // ==========================================
-// DATA STRUCTURES (Unchanged)
+// DATA STRUCTURES
 // ==========================================
 
 class HuffmanNode {
@@ -57,10 +57,12 @@ struct CompressionStats {
     double efficiency;
     string fileName;
     string fileType;
+    string status; // Success/Error message
+    string outputPath; // Where the file was saved
 };
 
 // ==========================================
-// HUFFMAN LOGIC (Unchanged from previous fix)
+// HUFFMAN LOGIC
 // ==========================================
 
 class BinaryHeap {
@@ -113,7 +115,7 @@ public:
     }
 };
 
-HuffmanNode* buildHuffmanTree(const unsigned char* bytes, const uint64_t* freqs, int uniqueCount) {
+HuffmanNode* buildHuffmanTree(uint64_t* freqs) {
     BinaryHeap minHeap(256 + 5);
     for (int i = 0; i < 256; ++i) {
         if (freqs[i] > 0) {
@@ -139,7 +141,7 @@ HuffmanNode* buildHuffmanTree(const unsigned char* bytes, const uint64_t* freqs,
 void generateCodes(HuffmanNode* root, unordered_map<unsigned char, string>& codeMap, string path = "") {
     if (!root) return;
     if (root->isLeaf()) {
-        codeMap[root->data] = path.empty() ? "0" : path; // Handle single character case
+        codeMap[root->data] = path.empty() ? "0" : path;
         return;
     }
     generateCodes(root->left, codeMap, path + "0");
@@ -154,7 +156,36 @@ void freeTree(HuffmanNode* root) {
 }
 
 // ==========================================
-// GUI & UTILS (Headers and helpers, mostly unchanged)
+// FILE I/O HELPERS
+// ==========================================
+
+class BitWriter {
+public:
+    vector<unsigned char> bytes;
+    unsigned char currentByte = 0;
+    int bitCount = 0;
+
+    void writeBit(char bit) { // '0' or '1'
+        if (bit == '1') {
+            currentByte |= (1 << (7 - bitCount));
+        }
+        bitCount++;
+        if (bitCount == 8) {
+            bytes.push_back(currentByte);
+            currentByte = 0;
+            bitCount = 0;
+        }
+    }
+
+    void flush() {
+        if (bitCount > 0) {
+            bytes.push_back(currentByte);
+        }
+    }
+};
+
+// ==========================================
+// GUI & UTILS
 // ==========================================
 
 struct VizNode {
@@ -185,7 +216,6 @@ string openFileDialog(const char* filter) {
     return "";
 }
 
-// Helpers for UI (drawButton, drawCard, isHovered - Unchanged)
 void drawButton(sf::RenderWindow& window, const string& text, float x, float y, float w, float h, sf::Color color, sf::Font& font, bool active = false) {
     sf::RectangleShape btn(sf::Vector2f(w, h));
     btn.setPosition(x, y);
@@ -237,10 +267,16 @@ bool isHovered(float mx, float my, float x, float y, float w, float h) {
     return mx >= x && mx <= x + w && my >= y && my <= y + h;
 }
 
-// Universal File Processor (Unchanged from previous fix)
-void processFile(const string& path, HuffmanNode*& root, vector<VizNode>& vizNodes, CompressionStats& stats, unordered_map<unsigned char, string>& codeMap, string& fileData) {
+// ==========================================
+// COMPRESSION & DECOMPRESSION
+// ==========================================
+
+void compressFile(const string& path, HuffmanNode*& root, vector<VizNode>& vizNodes, CompressionStats& stats, unordered_map<unsigned char, string>& codeMap) {
     ifstream f(path, ios::binary);
-    if (!f) return;
+    if (!f) {
+        stats.status = "Error: Cannot open file";
+        return;
+    }
 
     // Get file size
     f.seekg(0, ios::end);
@@ -250,8 +286,6 @@ void processFile(const string& path, HuffmanNode*& root, vector<VizNode>& vizNod
     // Read data
     vector<char> buffer(size);
     if (f.read(buffer.data(), size)) {
-        fileData.assign(buffer.begin(), buffer.end());
-
         // Clean up old tree
         if (root) freeTree(root);
         root = nullptr;
@@ -260,15 +294,46 @@ void processFile(const string& path, HuffmanNode*& root, vector<VizNode>& vizNod
 
         // Frequency Analysis
         uint64_t freqs[256] = { 0 };
-        for (unsigned char c : fileData) freqs[c]++;
+        for (unsigned char c : buffer) freqs[c]++;
 
         // Build Tree
-        root = buildHuffmanTree(nullptr, freqs, 256);
+        root = buildHuffmanTree(freqs);
         generateCodes(root, codeMap);
+
+        // Calculate Compressed Size & Generate Bit Stream
+        BitWriter bw;
+        for (unsigned char c : buffer) {
+            string code = codeMap[c];
+            for (char bit : code) bw.writeBit(bit);
+        }
+        bw.flush();
+
+        // SAVE TO FILE
+        string outPath = path + ".huff";
+        ofstream out(outPath, ios::binary);
+        if (out) {
+            // Header: MAGIC (4 bytes), Original Size (8 bytes)
+            out.write("HUFF", 4);
+            uint64_t origSize = size;
+            out.write(reinterpret_cast<const char*>(&origSize), sizeof(origSize));
+
+            // Frequency Table
+            out.write(reinterpret_cast<const char*>(freqs), sizeof(freqs));
+
+            // Compressed Data
+            out.write(reinterpret_cast<const char*>(bw.bytes.data()), bw.bytes.size());
+            out.close();
+
+            stats.status = "Success! Compressed.";
+            stats.outputPath = outPath;
+        }
+        else {
+            stats.status = "Error: Cannot write output";
+        }
 
         // Stats
         stats.originalSize = size * 8; // bits
-        stats.compressedSize = 0;
+        stats.compressedSize = bw.bytes.size() * 8;
         stats.entropy = 0;
         stats.avgCodeLength = 0;
 
@@ -277,7 +342,6 @@ void processFile(const string& path, HuffmanNode*& root, vector<VizNode>& vizNod
 
         if (totalFreq > 0) {
             for (auto& pair : codeMap) {
-                stats.compressedSize += freqs[pair.first] * pair.second.length();
                 double p = (double)freqs[pair.first] / totalFreq;
                 if (p > 0) {
                     stats.entropy -= p * log2(p);
@@ -294,6 +358,88 @@ void processFile(const string& path, HuffmanNode*& root, vector<VizNode>& vizNod
     }
 }
 
+void decompressFile(const string& path, HuffmanNode*& root, vector<VizNode>& vizNodes, CompressionStats& stats, unordered_map<unsigned char, string>& codeMap) {
+    ifstream f(path, ios::binary);
+    if (!f) {
+        stats.status = "Error: Cannot open file";
+        return;
+    }
+
+    // Check Header
+    char magic[5] = { 0 };
+    f.read(magic, 4);
+    if (strcmp(magic, "HUFF") != 0) {
+        stats.status = "Error: Not a HUFF file (Cannot Decompress)";
+        return;
+    }
+
+    uint64_t originalSize = 0;
+    f.read(reinterpret_cast<char*>(&originalSize), sizeof(originalSize));
+
+    // Read Frequency Table
+    uint64_t freqs[256];
+    f.read(reinterpret_cast<char*>(freqs), sizeof(freqs));
+
+    // Rebuild Tree
+    if (root) freeTree(root);
+    root = buildHuffmanTree(freqs);
+    vizNodes.clear();
+    codeMap.clear();
+    generateCodes(root, codeMap);
+
+    // Viz Layout
+    int cx = 0;
+    assignPositions(root, cx, 0, vizNodes);
+
+    // Read Compressed Data & Decode
+    string outPath = path + ".decoded";
+    size_t extPos = path.find(".huff");
+    if (extPos != string::npos) {
+        outPath = path.substr(0, extPos); // Restore name
+        outPath = "decoded_" + outPath.substr(outPath.find_last_of("/\\") + 1);
+    }
+    else {
+        outPath = "decoded_" + path.substr(path.find_last_of("/\\") + 1);
+    }
+
+    ofstream out(outPath, ios::binary);
+    if (!out) {
+        stats.status = "Error: Cannot create output";
+        return;
+    }
+
+    HuffmanNode* curr = root;
+    uint64_t bytesDecoded = 0;
+    char byte;
+
+    // Read rest of file
+    while (f.get(byte) && bytesDecoded < originalSize) {
+        for (int i = 7; i >= 0; --i) {
+            int bit = (byte >> i) & 1;
+            if (bit == 0) curr = curr->left;
+            else curr = curr->right;
+
+            if (curr->isLeaf()) {
+                out.put(curr->data);
+                bytesDecoded++;
+                curr = root;
+                if (bytesDecoded == originalSize) break;
+            }
+        }
+    }
+    out.close();
+
+    stats.status = "Success! Decompressed.";
+    stats.outputPath = outPath;
+    stats.originalSize = originalSize * 8;
+    stats.compressedSize = (uint64_t)f.tellg() * 8; // approx
+    stats.fileType = "DECOMPRESSED";
+
+    stats.compressionRatio = 0;
+    stats.entropy = 0;
+    stats.efficiency = 0;
+}
+
 // ==========================================
 // MAIN APPLICATION
 // ==========================================
@@ -304,30 +450,29 @@ int main() {
 
     sf::Font font;
     if (!font.loadFromFile("arial.ttf")) {
-        cerr << "Error: arial.ttf not found." << endl;
+        // Handle error in production
     }
 
     enum Mode { HOME, TEXT_MODE, AUDIO_MODE, VIDEO_MODE, TREE_VIEW };
     Mode currentMode = HOME;
-    Mode returnMode = HOME; // To know where to go back from Tree View
+    Mode returnMode = HOME;
 
     // Global State
     HuffmanNode* root = nullptr;
-    string currentFileData = "";
     unordered_map<unsigned char, string> codeMap;
     CompressionStats stats = { 0 };
     vector<VizNode> vizNodes;
-    string statusMsg = "Ready";
+    string selectedFilePath = "";
 
-    // Helper function to clear all stats and reset the state
     auto clearStats = [&]() {
         if (root) freeTree(root);
         root = nullptr;
-        currentFileData.clear();
         codeMap.clear();
         stats = { 0 };
         vizNodes.clear();
-        statusMsg = "Ready";
+        selectedFilePath = "";
+        stats.status = "Ready";
+        stats.outputPath = "";
         };
 
     while (window.isOpen()) {
@@ -345,16 +490,14 @@ int main() {
             if (event.type == sf::Event::MouseButtonPressed) {
                 if (event.mouseButton.button == sf::Mouse::Left) {
 
-                    // NAV: Back Button Logic
+                    // NAV: Back Button
                     if (currentMode != HOME) {
                         if (isHovered(mx, my, 20, 20, 80, 40)) {
                             if (currentMode == TREE_VIEW) {
                                 currentMode = returnMode;
-                                // DO NOT clear stats when returning from tree view, keep them to show on the main analysis panel
                             }
-                            else { // Returning from a mode (TEXT/AUDIO/VIDEO) to HOME
+                            else {
                                 currentMode = HOME;
-                                // ADDED: Clear all data and stats when returning to HOME
                                 clearStats();
                             }
                         }
@@ -366,28 +509,37 @@ int main() {
                         if (isHovered(mx, my, 800, 300, 250, 300)) currentMode = VIDEO_MODE;
                     }
                     else if (currentMode == TEXT_MODE || currentMode == AUDIO_MODE || currentMode == VIDEO_MODE) {
-                        // Import Button
-                        if (isHovered(mx, my, 50, 140, 200, 50)) {
-                            const char* filter = "All Files\0*.*\0";
-                            if (currentMode == TEXT_MODE) filter = "Text Files\0*.txt\0All Files\0*.*\0";
-                            else if (currentMode == AUDIO_MODE) filter = "Audio Files\0*.wav;*.mp3;*.ogg;*.flac\0All Files\0*.*\0";
-                            else if (currentMode == VIDEO_MODE) filter = "Video Files\0*.mp4;*.avi;*.mkv;*.mov\0All Files\0*.*\0";
 
-                            string path = openFileDialog(filter);
+                        // 1. SELECT FILE BUTTON
+                        if (isHovered(mx, my, 50, 100, 250, 50)) {
+                            string path = openFileDialog("All Files\0*.*\0");
                             if (!path.empty()) {
-                                processFile(path, root, vizNodes, stats, codeMap, currentFileData);
-                                statusMsg = "Compression Complete!";
-                                stats.fileType = (currentMode == TEXT_MODE ? "TEXT" : (currentMode == AUDIO_MODE ? "AUDIO" : "VIDEO"));
+                                clearStats(); // Reset previous run
+                                selectedFilePath = path;
 
-                                // Extract filename
+                                // Extract filename for display
                                 size_t lastSlash = path.find_last_of("\\/");
                                 if (lastSlash != string::npos) stats.fileName = path.substr(lastSlash + 1);
                                 else stats.fileName = path;
+                                stats.fileType = (currentMode == TEXT_MODE ? "TEXT" : (currentMode == AUDIO_MODE ? "AUDIO" : "VIDEO"));
+                                stats.status = "File Selected. Choose Action.";
                             }
                         }
 
-                        // View Tree Button
-                        if (root && isHovered(mx, my, 50, 210, 200, 50)) {
+                        // 2. ACTION BUTTONS (Only if file selected)
+                        if (!selectedFilePath.empty()) {
+                            // COMPRESS BUTTON
+                            if (isHovered(mx, my, 50, 170, 120, 40)) {
+                                compressFile(selectedFilePath, root, vizNodes, stats, codeMap);
+                            }
+                            // DECOMPRESS BUTTON
+                            if (isHovered(mx, my, 180, 170, 120, 40)) {
+                                decompressFile(selectedFilePath, root, vizNodes, stats, codeMap);
+                            }
+                        }
+
+                        // 3. VIEW TREE BUTTON
+                        if (root && isHovered(mx, my, 50, 250, 250, 50)) {
                             returnMode = currentMode;
                             currentMode = TREE_VIEW;
                         }
@@ -396,7 +548,7 @@ int main() {
             }
         }
 
-        // RENDERING (Unchanged from previous fix)
+        // RENDERING
         window.clear(sf::Color(20, 20, 25));
 
         // HEADER
@@ -410,7 +562,7 @@ int main() {
         title.setFillColor(sf::Color::White);
         window.draw(title);
 
-        sf::Text subtitle("v2.0 PRO", font, 14);
+        sf::Text subtitle("v2.3 PRO", font, 14);
         subtitle.setPosition(470, 35);
         subtitle.setFillColor(sf::Color(0, 255, 128));
         window.draw(subtitle);
@@ -436,7 +588,7 @@ int main() {
             drawCard(window, "VIDEO", "Binary Lossless", "Vi", 800, 300, 250, 300, sf::Color(40, 40, 50), font, isHovered(mx, my, 800, 300, 250, 300));
         }
         else if (currentMode == TEXT_MODE || currentMode == AUDIO_MODE || currentMode == VIDEO_MODE) {
-            // Shared Layout for all compression modes
+            // SIDEBAR
             sf::RectangleShape sidebar(sf::Vector2f(300, 720));
             sidebar.setPosition(0, 80);
             sidebar.setFillColor(sf::Color(25, 25, 30));
@@ -447,19 +599,27 @@ int main() {
             sbTitle.setFillColor(sf::Color::White);
             window.draw(sbTitle);
 
-            string btnLabel = "IMPORT FILE";
-            if (currentMode == AUDIO_MODE) btnLabel = "IMPORT AUDIO";
-            if (currentMode == VIDEO_MODE) btnLabel = "IMPORT VIDEO";
+            // 1. SELECT FILE
+            drawButton(window, "SELECT FILE", 50, 100, 250, 50, sf::Color(0, 120, 210), font, isHovered(mx, my, 50, 100, 250, 50));
 
-            drawButton(window, btnLabel, 50, 140, 200, 50, sf::Color(0, 120, 210), font, isHovered(mx, my, 50, 140, 200, 50));
-
-            if (root) {
-                drawButton(window, "VIEW TREE MAP", 50, 210, 200, 50, sf::Color(0, 180, 100), font, isHovered(mx, my, 50, 210, 200, 50));
+            // 2. ACTION BUTTONS (Conditional)
+            if (!selectedFilePath.empty()) {
+                drawButton(window, "COMPRESS", 50, 170, 120, 40, sf::Color(0, 150, 100), font, isHovered(mx, my, 50, 170, 120, 40));
+                drawButton(window, "DECOMPRESS", 180, 170, 120, 40, sf::Color(200, 100, 0), font, isHovered(mx, my, 180, 170, 120, 40));
             }
             else {
-                drawButton(window, "VIEW TREE MAP", 50, 210, 200, 50, sf::Color(60, 60, 70), font, false);
+                sf::Text hint("No file selected", font, 14);
+                hint.setPosition(50, 180);
+                hint.setFillColor(sf::Color(100, 100, 100));
+                window.draw(hint);
             }
 
+            // 3. TREE VIEW
+            if (root) {
+                drawButton(window, "VIEW TREE MAP", 50, 250, 250, 50, sf::Color(80, 80, 150), font, isHovered(mx, my, 50, 250, 250, 50));
+            }
+
+            // MAIN PANEL
             sf::Text panelTitle("ANALYSIS REPORT", font, 20);
             panelTitle.setPosition(350, 110);
             panelTitle.setFillColor(sf::Color::White);
@@ -472,8 +632,32 @@ int main() {
             panel.setOutlineColor(sf::Color(60, 60, 70));
             window.draw(panel);
 
-            if (root) {
-                float startY = 180;
+            // STATUS MESSAGES
+            if (!stats.status.empty() && stats.status != "Ready") {
+                sf::Text statusTxt(stats.status, font, 18);
+                statusTxt.setPosition(370, 170);
+                statusTxt.setFillColor(stats.status.find("Error") != string::npos ? sf::Color::Red : sf::Color::Green);
+                window.draw(statusTxt);
+
+                if (!stats.outputPath.empty()) {
+                    sf::Text pathTxt("Saved to: " + stats.outputPath, font, 14);
+                    pathTxt.setPosition(370, 200);
+                    pathTxt.setFillColor(sf::Color(200, 200, 200));
+                    window.draw(pathTxt);
+                }
+            }
+            else {
+                sf::Text info("1. Select a file\n2. Choose Compress or Decompress", font, 20);
+                sf::FloatRect ib = info.getLocalBounds();
+                info.setOrigin(ib.width / 2, ib.height / 2);
+                info.setPosition(750, 400);
+                info.setFillColor(sf::Color(80, 80, 90));
+                window.draw(info);
+            }
+
+            // STATS DISPLAY (Only if we have processed data)
+            if (root && !stats.status.empty() && stats.status.find("Success") != string::npos) {
+                float startY = 250;
                 float barHeight = 40;
                 float gap = 20;
                 float barX = 380;
@@ -505,33 +689,15 @@ int main() {
                 drawStatRow("File Name", stats.fileName, sf::Color::White, startY);
 
                 stringstream ss;
-                ss << stats.originalSize << " bits (" << fixed << setprecision(2) << stats.originalSize / 8.0 / 1024.0 << " KB)";
+                ss << stats.originalSize << " bits";
                 drawStatRow("Original Size", ss.str(), sf::Color::Red, startY + barHeight + gap);
 
-                ss.str(""); ss << stats.compressedSize << " bits (" << fixed << setprecision(2) << stats.compressedSize / 8.0 / 1024.0 << " KB)";
+                ss.str(""); ss << stats.compressedSize << " bits";
                 drawStatRow("Compressed Size", ss.str(), sf::Color::Green, startY + (barHeight + gap) * 2);
-
-                ss.str(""); ss << fixed << setprecision(2) << stats.compressionRatio << " %";
-                drawStatRow("Ratio", ss.str(), sf::Color::Cyan, startY + (barHeight + gap) * 3);
-
-                ss.str(""); ss << fixed << setprecision(3) << stats.entropy << " bits/sym";
-                drawStatRow("Entropy", ss.str(), sf::Color::Magenta, startY + (barHeight + gap) * 4);
-
-                ss.str(""); ss << fixed << setprecision(3) << stats.efficiency << " %";
-                drawStatRow("Efficiency", ss.str(), sf::Color::Yellow, startY + (barHeight + gap) * 5);
-
-            }
-            else {
-                sf::Text info("Waiting for input stream...", font, 24);
-                sf::FloatRect ib = info.getLocalBounds();
-                info.setOrigin(ib.width / 2, ib.height / 2);
-                info.setPosition(750, 400);
-                info.setFillColor(sf::Color(80, 80, 90));
-                window.draw(info);
             }
         }
         else if (currentMode == TREE_VIEW) {
-            // Tree Visualization
+            // Tree Visualization (Rendering Logic)
             if (!vizNodes.empty()) {
                 int maxX = 0;
                 for (auto& n : vizNodes) if (n.x > maxX) maxX = n.x;
@@ -549,11 +715,6 @@ int main() {
                                     sf::Vertex(sf::Vector2f(child.screenX, child.screenY), sf::Color(100, 100, 100))
                                 };
                                 window.draw(line, 2, sf::Lines);
-
-                                sf::Text zero("0", font, 12);
-                                zero.setPosition((n.screenX + child.screenX) / 2, (n.screenY + child.screenY) / 2);
-                                zero.setFillColor(sf::Color::Yellow);
-                                window.draw(zero);
                                 break;
                             }
                         }
@@ -566,11 +727,6 @@ int main() {
                                     sf::Vertex(sf::Vector2f(child.screenX, child.screenY), sf::Color(100, 100, 100))
                                 };
                                 window.draw(line, 2, sf::Lines);
-
-                                sf::Text one("1", font, 12);
-                                one.setPosition((n.screenX + child.screenX) / 2, (n.screenY + child.screenY) / 2);
-                                one.setFillColor(sf::Color::Yellow);
-                                window.draw(one);
                                 break;
                             }
                         }
@@ -582,10 +738,9 @@ int main() {
                     c.setOrigin(15, 15);
                     c.setPosition(n.screenX, n.screenY);
                     c.setFillColor(n.n->isLeaf() ? sf::Color(0, 200, 100) : sf::Color(200, 200, 0));
-                    c.setOutlineThickness(1);
-                    c.setOutlineColor(sf::Color::White);
                     window.draw(c);
 
+                    // FIXED: Character rendering
                     if (n.n->isLeaf()) {
                         string s = "";
                         unsigned char ch = n.n->data;
@@ -599,26 +754,12 @@ int main() {
                             s = buf;
                         }
 
-                        sf::Text t(s, font, 10);
-                        t.setOrigin(t.getLocalBounds().width / 2, t.getLocalBounds().height / 2);
-                        t.setPosition(n.screenX, n.screenY - 5);
+                        sf::Text t(s, font, 12);
+                        sf::FloatRect b = t.getLocalBounds();
+                        t.setOrigin(b.width / 2, b.height / 2);
+                        t.setPosition(n.screenX, n.screenY);
                         t.setFillColor(sf::Color::Black);
                         window.draw(t);
-                    }
-                    else {
-                        sf::Text freq(to_string(n.n->freq), font, 9);
-                        freq.setOrigin(freq.getLocalBounds().width / 2, freq.getLocalBounds().height / 2);
-                        freq.setPosition(n.screenX, n.screenY - 2);
-                        freq.setFillColor(sf::Color::Black);
-                        window.draw(freq);
-                    }
-
-                    if (n.n->isLeaf()) {
-                        sf::Text f(to_string(n.n->freq), font, 10);
-                        f.setOrigin(f.getLocalBounds().width / 2, 0);
-                        f.setPosition(n.screenX, n.screenY + 18);
-                        f.setFillColor(sf::Color(200, 200, 200));
-                        window.draw(f);
                     }
                 }
             }
@@ -626,8 +767,6 @@ int main() {
 
         window.display();
     }
-
     return 0;
 }
-
 
